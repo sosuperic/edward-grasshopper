@@ -1,51 +1,66 @@
-# Generate networkx graph
+# Generate json to use for Peter's graph visualization tool
 
-import networkx as nx
+import json
 import pickle
 
-from config import WIKIART_ARTIST_TO_INFO_PATH
+from config import WIKIART_ARTIST_TO_INFO_PATH, WIKIART_INFLUENCE_GRAPH_PATH
 
-def artist_influence():
-    # G = nx.DiGraph()
-    G = nx.Graph()
-
+def create_json():
+    """
+    Generate json to use for Peter's graph visualization tool
+    """
     a2i = pickle.load(open(WIKIART_ARTIST_TO_INFO_PATH, 'rb'))
-    artists = sorted(a2i.keys())
-    for a in artists:
-        G.add_node(a)
+    artists = set(a2i.keys())
 
-    #
+    # Define node attributes
+    meta = {'fields': [
+        {'name': 'id', 'type': 'node-id'},
+        {'name': 'birth_year', 'type': 'integer'},
+        {'name': 'art_movement', 'type': 'string'},
+        {'name': 'genre', 'type': 'string'}
+    ]}
+
+    # Add nodes and links
+    nodes = []
+    links = []
     for artist, info in a2i.items():
+        ### Add node
+        birth_year, art_movement, genre = None, None, None
+
+        # Probably non-robust way of extracting year, but...
+        try:
+            birth_year = int(info['Born'][0][-4:])  # last 4, e.g. [u'14April1852', ...]
+        except Exception:
+            pass
+
+        # Note artists can have multiple art movements, not sure if it's sorted or not but...
+        if 'ArtMovement' in info:
+            art_movement = info['ArtMovement'][0]
+        if 'Genre' in info:
+            genre = info['Genre'][0]
+
+        node = {'id': artist, 'birth_year': birth_year, 'art_movement': art_movement, 'genre': genre}
+        nodes.append(node)
+
+        ### Add edges
         if 'Influencedby' in info:
             for other_artist in info['Influencedby']:
                 if other_artist in artists: # skip schools/movements
-                    G.add_edge(other_artist, artist)
-                # artists.index
+                    links.append([other_artist, artist])
         if 'Influencedon' in info:
             for other_artist in info['Influencedon']:
                 if other_artist in artists:
-                    G.add_edge(artist, other_artist)
-        # Not used right now
-        # if 'FriendsandCo-workers' in a2i:
+                    links.append([artist, other_artist])
 
-    # print G.edges()
-    # Write to csv for gephi
-    f = open('artist_influence.csv', 'wb')
-    f.write('Source,Target\n')
-    for a1, a2 in G.edges():
-        f.write('{},{}\n'.format(a1, a2))
+    # Create json and dump to file
+    json_graph = {
+        'nodes': nodes,
+        'links': links,
+        'meta': meta
+    }
 
-    # Draw using matplotlib and networkx
-    nx.draw(G, node_size=25)
-    import matplotlib.pylab as plt
-    plt.show()
-
-    # Calculate centrality
-    from pprint import pprint
-    # pprint(sorted(nx.betweenness_centrality(G).items(), key=lambda x: x[1]))
-    pprint(sorted(nx.eigenvector_centrality(G).items(), key=lambda x: x[1]))
-
+    with open(WIKIART_INFLUENCE_GRAPH_PATH, 'w') as f:
+        json.dump(json_graph, f)
 
 if __name__ == '__main__':
-    # Analysis
-    artist_influence()
+    create_json()
