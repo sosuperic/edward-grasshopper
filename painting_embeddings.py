@@ -31,6 +31,7 @@ class Painting(object):
     - img_size: size of Pillow Image (e.g. (750, 326))
     - img: loaded image as numpy matrix
     """
+    emb_size = (2048,)
 
     def __init__(self, path, vgg16=None):
         self.path = os.path.normpath(path)
