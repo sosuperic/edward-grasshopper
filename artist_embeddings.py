@@ -31,6 +31,7 @@ class Artist(object):
     - artist_path: path to directory containing images (str)
     - num_paintings: number of paintings artist has (int)
     """
+    component_size = 4      # TODO: replace with actual size
 
     def __init__(self, name):
         self.name = name
