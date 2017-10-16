@@ -27,7 +27,7 @@ import numpy as np
 import os
 import pickle
 from PIL import Image
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, IncrementalPCA
 
 import torch
 from torch.autograd import Variable
@@ -343,22 +343,53 @@ def save_raw_content_and_style_embs():
 def fit_and_save_PCA():
     """Use all raw content and style embeddings to fit a content_PCA and style_PCA"""
 
-    # Iterate over all saved painting embeddings -- do
-    def load_all_embs(emb_type):
+    # Iterate over all saved painting embeddings
+    def load_all_content_embs():
+        """
+        Inputs:
+        - emb_type: str ('content' or 'style')
+        - chunk: list of start and end percentages 
+        - dropout is float in [0.0, 1.0] denoting probability of skipping image
+            Used so we don't load all style embeddings
+        """
         embs = []
         for artist in os.listdir(WIKIART_ARTIST_PAINTING_RAW_EMBEDDINGS_PATH):
             artist_path = os.path.join(WIKIART_ARTIST_PAINTING_RAW_EMBEDDINGS_PATH, artist)
             emb_files = os.listdir(artist_path)
             for emb_file in emb_files:
                 emb_file_path = os.path.join(artist_path, emb_file)
-                if emb_file_path.endswith('{}.pkl'.format(emb_type)):
+                if emb_file_path.endswith('content.pkl'):
                     emb = pickle.load(open(emb_file_path, 'r'))
                     emb = emb.astype(np.float16)        # reduce so we can have memory to run PCA
                     emb = np.squeeze(emb)               # (1, 4096) -> (4096, )
                     embs.append(emb)
-            # break
+
         return embs
 
+    def get_all_style_emb_fps():
+        emb_fps = []
+        for artist in os.listdir(WIKIART_ARTIST_PAINTING_RAW_EMBEDDINGS_PATH):
+            artist_path = os.path.join(WIKIART_ARTIST_PAINTING_RAW_EMBEDDINGS_PATH, artist)
+            emb_files = os.listdir(artist_path)
+            for emb_file in emb_files:
+                emb_file_path = os.path.join(artist_path, emb_file)
+                if emb_file_path.endswith('style.pkl'):
+                    emb_fps.append(emb_file_path)
+        return emb_fps
+
+    def load_style_embs_in_chunks(emb_fps, c, num_chunks):
+        """Load c-th of N chunks from emb_fps"""
+        num_embs = len(emb_fps)
+        chunk_size = num_embs / num_chunks
+        embs = []
+        emb_idx = chunk_size * c
+        for i in range(chunk_size):
+            emb = pickle.load(open(emb_fps[emb_idx + i], 'r'))
+            emb = emb.astype(np.float16)
+            emb = np.squeeze(emb)
+            embs.append(emb)
+        return embs
+            
     def fit_PCA(list_of_embs, n_components=1024):
         X = np.array(list_of_embs)
         print X.shape
@@ -366,23 +397,30 @@ def fit_and_save_PCA():
         pca.fit(X)
         return pca
 
-    # Content PCA
-    print '=' * 100
-    print 'Loading content embeddings'
-    content_embs = load_all_embs('content')
-    print 'Content PCA'
-    content_PCA = fit_PCA(content_embs, PCA_CONTENT_DIM)
-    with open(WIKIART_PAINTINGS_PCA_CONTENT, 'w') as f:
-        pickle.dump(content_PCA, f, protocol=2)
+    # # Content PCA
+    # print '=' * 100
+    # print 'Loading content embeddings'
+    # content_embs = load_all_content_embs()
+    # print 'Content PCA'
+    # content_PCA = fit_PCA(content_embs, PCA_CONTENT_DIM)
+    # with open(WIKIART_PAINTINGS_PCA_CONTENT, 'w') as f:
+    #     pickle.dump(content_PCA, f, protocol=2)
 
     # Style PCA
-    # TODO: Probably too big to fit all embeddings in memory (131328), so run it a bunch of times on random subsets,
-    # take the average
     print '=' * 100
-    print 'Loading style embeddings'
-    style_embs = load_all_embs('style')
     print 'Style PCA'
-    style_PCA = fit_PCA(style_embs, PCA_STYLE_DIM)
+    # Raw style embeddings too large to fit in memory (each is 131328-dim), so fit
+    # IncrementalPCA in chunks
+    style_PCA = IncrementalPCA(n_components=PCA_STYLE_DIM)
+    style_emb_fps = get_all_style_emb_fps()
+    num_chunks = 20
+    for c in range(num_chunks):
+        print '-- chunk: {}'.format(c)
+        style_embs = load_style_embs_in_chunks(style_emb_fps, c, num_chunks)
+        X = np.array(style_embs)
+        if c == 0:
+            print X.shape
+        style_PCA.partial_fit(X)
     with open(WIKIART_PAINTINGS_PCA_STYLE, 'w') as f:
         pickle.dump(style_PCA, f, protocol=2)
 
@@ -393,6 +431,7 @@ def save_PCA_content_and_style_embs():
     style_PCA = pickle.load(open(WIKIART_PAINTINGS_PCA_STYLE, 'r'))
 
     # Iterate over all saved raw painting embeddings
+    n = 0
     for artist_name in os.listdir(WIKIART_ARTIST_PAINTING_RAW_EMBEDDINGS_PATH):
         artist_path = os.path.join(WIKIART_ARTIST_PAINTING_RAW_EMBEDDINGS_PATH, artist_name)
 
@@ -402,31 +441,30 @@ def save_PCA_content_and_style_embs():
             os.mkdir(out_dir)
 
         for emb_fn in os.listdir(artist_path):
+            n += 1
             emb_fp = os.path.join(artist_path, emb_fn)
+            print 'Processing: {}, n={}'.format(emb_fp, n)
 
             # Skip if PCA already exists
             if emb_fn.endswith('content.pkl'):
                 out_fn = emb_fn.replace('raw-content', 'PCA-content')
             elif emb_fn.endswith('style.pkl'):
                 out_fn = emb_fn.replace('raw-style', 'PCA-style')
+                continue
             out_path = os.path.join(out_dir, out_fn)
-            # if os.path.exists(out_path):
-                # continue
+            if os.path.exists(out_path):
+                continue
 
             # Dimensionality reduction using PCA
             emb = pickle.load(open(emb_fp, 'r'))
             if emb_fn.endswith('content.pkl'):
-                print emb.reshape(1, -1).shape
                 emb = content_PCA.transform(emb.reshape(1, -1))
-                print emb.shape
             elif emb_fn.endswith('style.pkl'):
                 emb = style_PCA.transform(emb.reshape(1, -1))
 
             with open(out_path, 'w') as f:
                 pickle.dump(emb, f, protocol=2)
 
-            break
-        break
 
 if __name__ == '__main__':
     # Testing
@@ -438,7 +476,7 @@ if __name__ == '__main__':
     # Saving painting embeddings
     # save_raw_content_and_style_embs()
     fit_and_save_PCA()
-    save_PCA_content_and_style_embs()
+    # save_PCA_content_and_style_embs()
 
     #     if torch.cuda.is_available():
     #         model = model.cuda()
