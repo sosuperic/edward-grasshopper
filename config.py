@@ -1,5 +1,22 @@
 # Configuations, paths, etc.
 
+# Default hyperparameters
+class HParams():
+    def __init__(self):
+
+        # Training
+        self.batch_size = 64
+        self.lr = 0.001
+        self.max_nepochs = 1
+        self.save_every_nepochs = 1
+
+        # Model
+        self.img_size = 64
+
+        # Other
+        self.load_model_fp = None
+
+
 # Wikiart general
 WIKIART_PATH = 'data/wikiart/'
 WIKIART_ARTISTS_PATH = 'data/wikiart/data'
@@ -20,3 +37,5 @@ PCA_CONTENT_DIM = 1024
 PCA_STYLE_DIM = 1024
 WIKIART_ARTIST_EMBEDDINGS_PATH = 'data/wikiart_artist_embs'
 
+# Network, Models
+SAVED_MODELS_PATH = 'checkpoints/'
