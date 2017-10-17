@@ -445,23 +445,17 @@ def save_PCA_content_and_style_embs():
             emb_fp = os.path.join(artist_path, emb_fn)
             print 'Processing: {}, n={}'.format(emb_fp, n)
 
-            # Skip if PCA already exists
-            if emb_fn.endswith('content.pkl'):
-                out_fn = emb_fn.replace('raw-content', 'PCA-content')
-            elif emb_fn.endswith('style.pkl'):
-                out_fn = emb_fn.replace('raw-style', 'PCA-style')
-                continue
-            out_path = os.path.join(out_dir, out_fn)
-            if os.path.exists(out_path):
-                continue
-
             # Dimensionality reduction using PCA
             emb = pickle.load(open(emb_fp, 'r'))
             if emb_fn.endswith('content.pkl'):
+                out_fn = emb_fn.replace('raw-content', 'PCA-content')
                 emb = content_PCA.transform(emb.reshape(1, -1))
             elif emb_fn.endswith('style.pkl'):
+                out_fn = emb_fn.replace('raw-style', 'PCA-style')
                 emb = style_PCA.transform(emb.reshape(1, -1))
 
+            # Save
+            out_path = os.path.join(out_dir, out_fn)
             with open(out_path, 'w') as f:
                 pickle.dump(emb, f, protocol=2)
 
@@ -475,8 +469,8 @@ if __name__ == '__main__':
 
     # Saving painting embeddings
     # save_raw_content_and_style_embs()
-    fit_and_save_PCA()
-    # save_PCA_content_and_style_embs()
+    # fit_and_save_PCA()
+    save_PCA_content_and_style_embs()
 
     #     if torch.cuda.is_available():
     #         model = model.cuda()
