@@ -86,13 +86,29 @@ class WikiartDataset(Dataset):
 
         return img, artist
 
+    @staticmethod
+    def get_artist_one_hot_embedding(artist):
+        """Return np one-hot vector for artist"""
+        valid_artists = os.listdir(WIKIART_ARTIST_INFLUENCERS_EMBEDDINGS_PATH)
+        valid_artists = sorted(valid_artists)
+        one_hot = np.zeros(len(valid_artists))
+        one_hot[valid_artists.index(artist)] = 1
+        return one_hot
+
+    @staticmethod
+    def get_num_valid_artists():
+        """Return number of valid artists, i.e. length of one hot"""
+        n = len(os.listdir(WIKIART_ARTIST_INFLUENCERS_EMBEDDINGS_PATH))
+        return n
+
 def get_wikiart_data_loader(batch_size, img_scale_size):
     """Return data loader for the wikiart Dataset. Uses CenterCrop instead of RandomCrop"""
-    normalize = transforms.Normalize(mean=[0.514754100626, 0.453982621718, 0.386429772788],
-                                     std=[0.168468122614, 0.171339982617, 0.178252021991])
+    normalize = transforms.Normalize(mean=[0.518804936264, 0.455788331489, 0.388189828956],
+                                     std=[0.175493882268, 0.177110228715, 0.185269485347])
     transform = transforms.Compose([
         transforms.Scale(img_scale_size),
-        transforms.CenterCrop(img_scale_size),
+        transforms.RandomSizedCrop(img_scale_size),
+        # transforms.CenterCrop(img_scale_size),
         transforms.ToTensor(),
         normalize])
     dataset = WikiartDataset(transform=transform)
@@ -207,13 +223,13 @@ def counting_stats():
     print 'Total number of paintings: {}'.format(num_paintings.sum())
 
 if __name__ == '__main__':
-    # calculate_per_channel_mean_std()
+    calculate_per_channel_mean_std()
     # save_influencers_embeddings()
     # counting_stats()
 
     # Test
-    dl = get_wikiart_data_loader(4, 64)
-    for img_batch, artist_batch in dl:
-        print img_batch
-        print artist_batch
-        break
+    # dl = get_wikiart_data_loader(4, 64)
+    # for img_batch, artist_batch in dl:
+    #     print img_batch
+    #     print artist_batch
+    #     break

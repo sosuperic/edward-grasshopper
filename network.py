@@ -15,11 +15,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
+import torchvision.utils as vutils
 
 from config import SAVED_MODELS_PATH, WIKIART_ARTIST_EMBEDDINGS_PATH,\
     WIKIART_ARTIST_INFLUENCERS_EMBEDDINGS_PATH
-from datasets import get_wikiart_data_loader
-from models import InfluencersLSTM, ArtistGANFactory
+from datasets import get_wikiart_data_loader, WikiartDataset
+from models import InfluencersLSTM, Generator, Discriminator
 
 ###############################################################################
 # NETWORK
@@ -38,13 +39,15 @@ class Network(object):
 
         # Define / set up models
         self.influencers_lstm = InfluencersLSTM(hp.lstm_emb_size, hp.lstm_hidden_size)
-        self.artist_G = ArtistGANFactory.get_generator(hp.d)
-        self.artist_D = ArtistGANFactory.get_discriminator(hp.d)
+        self.artist_G = Generator(hp.z_size, hp.g_num_filters, self.influencers_lstm.get_final_emb_size())
+        self.artist_D = Discriminator(hp.d_num_filters, WikiartDataset.get_num_valid_artists())
         self.models = [self.influencers_lstm, self.artist_G, self.artist_D]
 
         # Initialize models
         self.artist_G.weight_init(mean=0.0, std=0.02)
         self.artist_D.weight_init(mean=0.0, std=0.02)
+
+        # Load weights potentially
 
         # Move to cuda
         if torch.cuda.is_available():
@@ -101,128 +104,239 @@ class Network(object):
 
         return packed_sequence, sorted_artists
 
+    def get_artists_one_hot(self, artist_batch):
+        """
+        Return Variable one hot embedding for batch of artists (batch, num_artists)
+        """
+        one_hots = []
+        for artist in artist_batch:
+            one_hot = WikiartDataset.get_artist_one_hot_embedding(artist)
+            one_hots.append(one_hot)
+        one_hots = np.array(one_hots)
+        one_hots = Variable(torch.Tensor(one_hots))
+        return one_hots
+
+
     def train(self):
         """Train on training data split"""
         for model in self.models:
             model.train()
 
+        # Load models
+        if self.hp.load_lstm_fp is not None:
+            self.load_model(self.hp.load_lstm_fp, self.hp.load_G_fp, self.hp.load_D_fp)
+
+        # Make directory to store outputs
+        out_dir = os.path.join(SAVED_MODELS_PATH, datetime.now().strftime('%B%d_%H-%M-%S'))
+        out_dir_imgs = os.path.join(out_dir, 'imgs')
+        os.mkdir(out_dir)
+        os.mkdir(out_dir_imgs)
+        print 'Checkpoints will be saved to: {}'.format(out_dir)
+
+        # Get Tensorboard summary writer
+        writer = SummaryWriter(out_dir)
+
+        # Get data_loaders
+        train_data_loader = get_wikiart_data_loader(self.hp.batch_size, self.hp.img_size)
+        # valid_data_loader = get_you_data_loader('valid', hp.batch_size)
+
         # Set up loss
+        D_criterion = nn.BCELoss()
 
         # Adam optimizer
         LSTM_optimizer = optim.Adam(self.influencers_lstm.parameters(), lr=self.hp.lr, betas=(0.5, 0.999))
         G_optimizer = optim.Adam(self.artist_G.parameters(), lr=self.hp.lr, betas=(0.5, 0.999))
         D_optimizer = optim.Adam(self.artist_D.parameters(), lr=self.hp.lr, betas=(0.5, 0.999))
 
-        # Get Tensorboard summary writer
-        writer = SummaryWriter('runs/' + datetime.now().strftime('%B%d_%H-%M-%S'))
+        # Test by creating images for same artist every _ iterations
+        test_artist_batch = ['piet-mondrian']        # TODO: add more
 
-        # Get data_loaders
-        train_data_loader = get_wikiart_data_loader(self.hp.batch_size, self.hp.img_size)
-        # valid_data_loader = get_you_data_loader('valid', hp.batch_size)
+        # Use fixed noise to generate images every _ iterations, i.e. same noise but model has been further trained
+        # Define fake and real labels so we can re-use it / pre-allocate space
+        fixed_noise = torch.FloatTensor(len(test_artist_batch), self.hp.z_size, 1, 1).normal_(0, 1)
+        fixed_noise = Variable(fixed_noise)
+        if torch.cuda.is_available():
+            fixed_noise = fixed_noise.cuda()
 
         for e in range(self.hp.max_nepochs):
             for train_idx, (img_batch, artist_batch) in enumerate(train_data_loader):
                 batch_size = len(artist_batch)
 
-                # The inputs are a batch of images
+                # Move inputs to cuda if possible, TODO: did I move everything
+                if torch.cuda.is_available():
+                    img_batch = img_batch.cuda()
+
                 # For each image, we have to get the artist and their influencer embeddings
                 batch_influencers_emb, sorted_artists = self.get_influencers_emb(artist_batch)
-                batch_influencers_emb = self.influencers_lstm(batch_influencers_emb)    # (num_layers * num_directions, batch, 2 * hidden_size)
-                batch_influencers_emb = batch_influencers_emb.view(batch_size, -1)      # (batch, ...)
 
-                import sys
-                sys.exit()
+                # Get one hot artist labels for auxiliary classification loss
+                one_hots = self.get_artists_one_hot(sorted_artists)
 
-            # for train_idx, (inputs, labels) in enumerate(train_data_loader):
-                # Convert raw Tensors to nn Variables
-                # inputs, labels = self.turn_inputs_labels_to_vars(inputs, labels)
+                ######################################################################
+                # 1) UPDATE D NETWORK: maximize log(D(x)) + log(1 - D(G(z)))
+                ######################################################################
+                self.artist_D.zero_grad()
 
-                LSTM_optimizer.zero_grad()
-                G_optimizer.zero_grad()
-                D_optimizer.zero_grad()
+                ######################################################################
+                #       First update D with the real images, i.e. log(D(x))
+                ######################################################################
+                discrim, aux = self.artist_D(Variable(img_batch))
+                real_labels = Variable(torch.ones(batch_size, 1))
+                loss_D_real_discrim = D_criterion(discrim, real_labels)
+                loss_D_real_aux = D_criterion(aux, one_hots)
+                loss_D_real = loss_D_real_discrim + loss_D_real_aux
+                loss_D_real.backward()
 
-                # Pass through network and get loss
-                # outputs = self.model(inputs)
-                # loss = criterion(outputs, labels)
-                # print 'Loss: {}'.format(self.var2numpy(loss))
+                ######################################################################
+                #       Next update D with fake images, i.e. log(1 - D(G(z)))
+                ######################################################################
+                noise = torch.FloatTensor(batch_size, self.hp.z_size, 1, 1).normal_(0, 1)
+                noise = Variable(noise)
 
-                # Optimize
-                # loss.backward()
-                # LSTM_optimizer.step()
-                # G_optimizer.step()
-                # D_optimizer.step()
+                # Get influencers embedding
+                lstm_init_h, lstm_init_c = self.influencers_lstm.init_hidden()  # clear out hidden states
+                batch_influencers_emb = self.influencers_lstm(batch_influencers_emb,
+                                                              lstm_init_h,
+                                                              lstm_init_c)  # (num_layers * num_directions, batch, 2 * hidden_size)
+                batch_influencers_emb = batch_influencers_emb.view(batch_size, -1, 1, 1)  # (batch, ..., 1, 1)
+
+                # Pass through Generator, then get loss from discriminator and backprop
+                fake_imgs = self.artist_G(noise, batch_influencers_emb)
+                fake_labels = Variable(torch.zeros(batch_size, 1))
+                # discrim, aux = self.artist_D(fake_imgs)  # TODO: why detach?
+                discrim, aux = self.artist_D(fake_imgs.detach())  # TODO: why detach?
+                loss_D_fake_discrim = D_criterion(discrim, fake_labels)
+                loss_D_fake_aux = D_criterion(aux, one_hots)
+                loss_D_fake = loss_D_fake_discrim + loss_D_fake_aux
+                loss_D_fake.backward()
+                # D_G_z1 = output.data.mean()
+                loss_D = loss_D_real + loss_D_fake
+
+                LSTM_optimizer.step()       # TODO: where should this step be?
+                D_optimizer.step()
+
+                ######################################################################
+                # 2) UPDATE G NETWORK: maximize log(D(G(z))), i.e. want to fool D
+                ######################################################################
+                self.artist_G.zero_grad()
+                real_labels = Variable(torch.ones(batch_size, 1))   # fake labels are real for generator cost
+                discrim, aux = self.artist_D(fake_imgs)    # now that D's been updated
+                loss_G_discrim = D_criterion(discrim, real_labels)
+                loss_G_aux = D_criterion(aux, one_hots)
+                loss_G = loss_G_discrim + loss_G_aux
+                loss_G.backward()
+                G_optimizer.step()
 
                 # Write loss to Tensorboard
-                # if train_idx % 10 == 0:
-                #     writer.add_scalar('loss', loss.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
+                if train_idx % 10 == 0:
+                    writer.add_scalar('loss_D_fake_discrim', loss_D_fake_discrim.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('loss_D_fake_aux', loss_D_fake_aux.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('loss_D_fake', loss_D_fake.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('loss_D_real_discrim', loss_D_real_discrim.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('loss_D_real_aux', loss_D_real_aux.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('loss_D_real', loss_D_real.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('loss_D', loss_D.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('loss_G_discrim', loss_G_discrim.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('loss_G_aux', loss_G_aux.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('loss_G', loss_G.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
 
                 # Save images, remembering to normalize back to [0,1]
-                # if i % 100 == 0:
-                #     vutils.save_image(real_cpu,
-                #                       '%s/real_samples.png' % opt.outf,
-                #                       normalize=True)
-                #     fake = netG(fixed_noise)
-                #     vutils.save_image(fake.data,
-                #                       '%s/fake_samples_epoch_%03d.png' % (opt.outf, epoch),
-                #                       normalize=True)
+                # Generate a fake one with fixed noise and for test artists
+                if train_idx % 100 == 0:
+                    print 'Epoch {} - {}'.format(e, train_idx)
 
-            # Save
-            # if e % self.hp.save_every_nepochs == 0:
-            #     torch.save(self.model.state_dict(), os.path.join(SAVED_MODELS_PATH, 'e{}.pt'.format(e)))
+                    # Save some real images (sanity check)
+                    vutils.save_image(img_batch, os.path.join(out_dir_imgs, 'real_e{}_{}.png'.format(e, train_idx)), normalize=True)
 
-            # # Evaluate on validation split
-            # for valid_idx, (inputs, labels) in enumerate(valid_data_loader):
-            #     inputs, labels = self.turn_inputs_labels_to_vars(inputs, labels)
-            #     outputs = self.model(inputs)
-            #     _, top_predicted_labels = torch.max(outputs, 1)
+                    # Generate fake
+                    lstm_init_h, lstm_init_c = self.influencers_lstm.init_hidden()  # clear out hidden states
+                    test_batch_influencers_emb, test_sorted_artists = self.get_influencers_emb(test_artist_batch)
+                    test_batch_influencers_emb = self.influencers_lstm(test_batch_influencers_emb,
+                                                                       lstm_init_h,
+                                                                       lstm_init_c)  # (num_layers * num_directions, batch, 2 * hidden_size)
+                    test_batch_influencers_emb = test_batch_influencers_emb.view(len(test_artist_batch), -1, 1, 1)  # (batch, ..., 1, 1)
+                    fake_imgs = self.artist_G(fixed_noise, test_batch_influencers_emb)
+                    vutils.save_image(fake_imgs.data, os.path.join(out_dir_imgs, 'fake_e{}_{}.png'.format(e, train_idx)), normalize=True)
+
+                    # Write image to tensorboard
+                    tboard_image = vutils.make_grid(fake_imgs.data, normalize=True, scale_each=True)
+                    tboard_name = '_'.join(test_artist_batch)
+                    writer.add_image(tboard_name, tboard_image, train_idx)  # TODO: should this be e * n + train_idx?
+
+                break
 
             # Write parameters to Tensorboard every epoch
-            # for name, param in self.model.named_parameters():
-            #     writer.add_histogram(name, param.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
+            for name, param in self.influencers_lstm.named_parameters():
+                writer.add_histogram('lstm-' + name, param.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
+            for name, param in self.artist_G.named_parameters():
+                writer.add_histogram('G-' + name, param.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
+            for name, param in self.artist_D.named_parameters():
+                writer.add_histogram('D-' + name, param.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
+
+            # Save
+            if e % self.hp.save_every_nepochs == 0:
+                torch.save(self.influencers_lstm.state_dict(), os.path.join(out_dir, 'lstm_e{}.pt'.format(e)))
+                torch.save(self.artist_G.state_dict(), os.path.join(out_dir, 'G_e{}.pt'.format(e)))
+                torch.save(self.artist_D.state_dict(), os.path.join(out_dir, 'D_e{}.pt'.format(e)))
 
         writer.close()
 
-    def generate(self, influencers):
+    def generate(self, influencers, n=16):
         """
         Inputs:
         - influencers: comma-separated list of influencers passed in by command line
+        - n: number of images to generate
         """
         # Load models
-        # self.load_model()self.hp.load_model_fp
+        self.load_model(self.hp.load_lstm_fp, self.hp.load_G_fp, self.hp.load_D_fp)
 
         for model in self.models:
             model.eval()
 
-        # Load influencer embeddings, pass into InfluencerLSTM
+        # batch_size = 1
+
+        # Get influencers_emb
         influencers = influencers.split(',')
-        influencers_emb = self.influencers_lstm(influencer_embs)
+        # TODO: get_influcners_emb takes a batch of artists. Whereas influencers here is the influencers themselves
+        # Different. Want to just get it and then repeat it n times
+        batch_influencers_emb, sorted_artists = self.get_influencers_emb(influencers)
+        lstm_init_h, lstm_init_c = self.influencers_lstm.init_hidden()  # clear out hidden states
+        batch_influencers_emb = self.influencers_lstm(batch_influencers_emb,
+                                                      lstm_init_h,
+                                                      lstm_init_c)  # (num_layers * num_directions, batch, 2 * hidden_size)
+        batch_influencers_emb = batch_influencers_emb.view(1, -1, 1, 1)  # (batch, ..., 1, 1)
 
-        # Get noise vector, other vectors for Generator
-        # Concate with influencers_emb
-        # output = self.artist_G(input)
+        # Get noise
+        noise = torch.FloatTensor(n, self.hp.z_size, 1, 1).normal_(0, 1)
+        noise = Variable(noise)
 
-        # Save img
+        fake_imgs = self.artist_G(noise, batch_influencers_emb)
+
+        # Save or do something with images
+        # vutils.save_image(fake_imgs, ...)
 
     ##############
     # Utils
     ##############
-    def load_model(self, models_fp):
+    def load_model(self, lstm_fp, G_fp, D_fp):
         """Load model parameters from given filename"""
-        print 'Loading model parameters from {}'.format(models_fp)
-        # self.model.load_state_dict(torch.load(fp))
+        # print 'Loading model parameters from {}'.format(models_fp)
+        self.influencers_lstm.load_state_dict(torch.load(lstm_fp))
+        self.artist_G.load_state_dict(torch.load(G_fp))
+        self.artist_D.load_state_dict(torch.load(D_fp))
 
-    def turn_inputs_labels_to_vars(self, inputs, labels):
-        """Wrap tensors in Variables for autograd; also move to gpu potentially"""
-        if torch.cuda.is_available():
-            inputs, labels = Variable(inputs.cuda()), Variable(labels.cuda())
-        else:
-            inputs, labels = Variable(inputs), Variable(labels)
-        return inputs, labels
-
-    def var2numpy(self, var):
-        """Return numpy matrix of data in Variable. Separate util function because CUDA tensors require
-        moving to cpu first"""
-        if var.is_cuda:
-            return var.data.cpu().numpy()
-        else:
-            return var.data.numpy()
+    # def turn_inputs_labels_to_vars(self, inputs, labels):
+    #     """Wrap tensors in Variables for autograd; also move to gpu potentially"""
+    #     if torch.cuda.is_available():
+    #         inputs, labels = Variable(inputs.cuda()), Variable(labels.cuda())
+    #     else:
+    #         inputs, labels = Variable(inputs), Variable(labels)
+    #     return inputs, labels
+    #
+    # def var2numpy(self, var):
+    #     """Return numpy matrix of data in Variable. Separate util function because CUDA tensors require
+    #     moving to cpu first"""
+    #     if var.is_cuda:
+    #         return var.data.cpu().numpy()
+    #     else:
+    #         return var.data.numpy()

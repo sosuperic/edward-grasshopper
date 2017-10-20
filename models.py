@@ -46,10 +46,10 @@ class InfluencersLSTM(nn.Module):
 
     def init_hidden(self):
         # The axes semantics are (num_layers, minibatch_size, hidden_dim)
-        return (Variable(torch.zeros(1, 1, self.hidden_dim)),
-                Variable(torch.zeros(1, 1, self.hidden_dim)))
+        return (Variable(torch.zeros(1, 1, self.hidden_size)),
+                Variable(torch.zeros(1, 1, self.hidden_size)))
 
-    def forward(self, x):
+    def forward(self, x, init_h, init_c):
         """
         Inputs:
         - x: PackedSequence
@@ -63,13 +63,18 @@ class InfluencersLSTM(nn.Module):
         packed = nn.utils.rnn.PackedSequence(lin_layer(x.data), x.batch_sizes)
 
         # Pass into LSTM
-        output, (h_n, c_n) = self.lstm(packed)
+        output, (h_n, c_n) = self.lstm(packed, (init_h, init_c))
         # output: (seq_len, batch, hidden_size * num_directions)
         # h_n: (num_layers * num_directions, batch, hidden_size)
         # c_n: (num_layers * num_directions, batch, hidden_size)
         influencer_emb = torch.cat((h_n, c_n), 2)       # (num_layers * num_directions, batch, 2 * hidden_size)
 
         return influencer_emb
+
+    def get_final_emb_size(self):
+        """Return final embedding size, including layers + directions (see end of forward())"""
+        size = self.n_layers * 1 * 2 * self.hidden_size
+        return size
 
 def test_influencers_lstm():
     """Pass in mock input to InfluencersLSTM"""
@@ -97,100 +102,128 @@ def normal_init(m, mean, std):
 ####################################################################################################################
 # ArtistGAN
 ####################################################################################################################
-
-class ArtistGANFactory(object):
-    """
-    The ArtistGAN is really a cDCGAN.
-    This class simply acts as a wrapper to produce the Generator and Discriminator, loss, etc.
-    """
-    def __init__(self):
-        super(ArtistGANFactory, self).__init__()
-
-    @staticmethod
-    def get_generator(d):
-        return Generator(d)
-
-    @staticmethod
-    def get_discriminator(d):
-        return Discriminator(d)
-
-    @staticmethod
-    def get_loss(d):
-        """
-        TODO: replace with Wasserstein loss?
-        """
-        return nn.BCELoss()
+#
+# class ArtistGANFactory(object):
+#     """
+#     The ArtistGAN is really a cDCGAN.
+#     This class simply acts as a wrapper to produce the Generator and Discriminator, loss, etc.
+#     """
+#     def __init__(self):
+#         super(ArtistGANFactory, self).__init__()
+#
+#     @staticmethod
+#     def get_generator(z_size, d):
+#         return Generator(z_size, d)
+#
+#     @staticmethod
+#     def get_discriminator(d):
+#         return Discriminator(d)
+#
+#     @staticmethod
+#     def get_loss(d):
+#         """
+#         TODO: replace with Wasserstein loss?
+#         """
+#         return nn.BCELoss()
 
 # G(z)
 class Generator(nn.Module):
     # initializers
-    def __init__(self, d=128):
+    def __init__(self, z_size, num_filters, influencers_emb_size):
         super(Generator, self).__init__()
-        self.deconv1_1 = nn.ConvTranspose2d(100, d * 4, 4, 1, 0)      # in_channels (z is noise), out_channels; why *4?
-        self.deconv1_1_bn = nn.BatchNorm2d(d*4)
-        self.deconv1_2 = nn.ConvTranspose2d(2, d*4, 4, 1, 0)          # This is on y, or in our case (influecnerlstm embedding)
-        self.deconv1_2_bn = nn.BatchNorm2d(d*4)
-        self.deconv2 = nn.ConvTranspose2d(d*8, d*4, 4, 2, 1)
-        self.deconv2_bn = nn.BatchNorm2d(d*4)
-        self.deconv3 = nn.ConvTranspose2d(d*4, d*2, 4, 2, 1)
-        self.deconv3_bn = nn.BatchNorm2d(d*2)
-        # self.deconv4 = nn.ConvTranspose2d(d, 3, 4, 2, 1)
-        self.deconv4 = nn.ConvTranspose2d(d*2, d, 4, 2, 1)
-        self.deconv4_bn = nn.BatchNorm2d(d)
-        self.deconv5 = nn.ConvTranspose2d(d, 3, 4, 2, 1) #    (3, )
+
+        self.relu = nn.ReLU(True)
+        self.tanh = nn.Tanh()
+
+        # First layers operating on z
+        self.conv1_z = nn.ConvTranspose2d(z_size, num_filters * 4, 4, 1, 0)
+        self.bn1_z = nn.BatchNorm2d(num_filters * 4)
+        self.conv2_z = nn.ConvTranspose2d(num_filters * 4, num_filters * 2, 4, 2, 1)
+        self.bn2_z = nn.BatchNorm2d(num_filters * 2)
+
+        # First layers operating on influencers embedding (in parallel with above)
+        self.conv1_inf = nn.ConvTranspose2d(influencers_emb_size, num_filters * 4, 4, 1, 0)
+        self.bn1_inf = nn.BatchNorm2d(num_filters * 4)
+        self.conv2_inf = nn.ConvTranspose2d(num_filters * 4, num_filters * 2, 4, 2, 1)
+        self.bn2_inf = nn.BatchNorm2d(num_filters * 2)
+
+        # After fusion of z and influencers
+        self.conv3 = nn.ConvTranspose2d(num_filters * 4, num_filters * 2, 4, 2, 1)
+        self.bn3 = nn.BatchNorm2d(num_filters * 2)
+        self.conv4 = nn.ConvTranspose2d(num_filters * 2, num_filters, 4, 2, 1)
+        self.bn4 = nn.BatchNorm2d(num_filters)
+        self.conv5 = nn.ConvTranspose2d(num_filters, 3, 4, 2, 1)
 
     # weight_init
     def weight_init(self, mean, std):
         for m in self._modules:
             normal_init(self._modules[m], mean, std)
 
-    # forward method
-    # def forward(self, input):
-    def forward(self, input, label):
-        x = F.leaky_relu(self.deconv1_1_bn(self.deconv1_1(input)), 0.2)
-        y = F.leaky_relu(self.deconv1_2_bn(self.deconv1_2(label)), 0.2)
-        x = torch.cat([x, y], 1)
-        x = F.leaky_relu(self.deconv2_bn(self.deconv2(x)), 0.2)
-        x = F.leaky_relu(self.deconv3_bn(self.deconv3(x)), 0.2)
-        # x = F.tanh(self.deconv4(x))
-        x = F.leaky_relu(self.deconv4_bn(self.deconv4(x)), 0.2)
-        x = F.tanh(self.deconv5(x))
+    def forward(self, z, influencers_emb):
+        """
+        Inputs:
+        - z: (batch, z_size, 1, 1)
+        - influencers_emb (batch, embedding size, 1, 1)
+        """
+        z = self.relu(self.bn1_z(self.conv1_z(z)))
+        z = self.relu(self.bn2_z(self.conv2_z(z)))
+
+        influencers_emb = self.relu(self.bn1_inf(self.conv1_inf(influencers_emb)))
+        influencers_emb = self.relu(self.bn2_inf(self.conv2_inf(influencers_emb)))
+
+        # Fuse
+        x = torch.cat([z, influencers_emb], 1)      # (batch, filters, x, y)
+
+        x = self.relu(self.bn3(self.conv3(x)))
+        x = self.relu(self.bn4(self.conv4(x)))
+        x = self.conv5(x)
+        x = self.tanh(x)
 
         return x
 
 class Discriminator(nn.Module):
-    # initializers
-    def __init__(self, d=128):
+
+    def __init__(self, num_filters, num_labels):
         super(Discriminator, self).__init__()
-        self.conv1_1 = nn.Conv2d(3, d/2, 4, 2, 1)
-        self.conv1_2 = nn.Conv2d(2, d/2, 4, 2, 1)
-        self.conv2 = nn.Conv2d(d, d*2, 4, 2, 1)
-        self.conv2_bn = nn.BatchNorm2d(d*2)
-        self.conv3 = nn.Conv2d(d*2, d*4, 4, 2, 1)
-        self.conv3_bn = nn.BatchNorm2d(d*4)
-        # self.conv4 = nn.Conv2d(d*4, 1, 4, 1, 0)
-        self.conv4 = nn.Conv2d(d*4, d*8, 4, 2, 1)
-        self.conv4_bn = nn.BatchNorm2d(d*8)
-        self.conv5 = nn.Conv2d(d*8, 1, 4, 1, 0)
+
+        self.num_filters = num_filters
+
+        self.conv1 = nn.Conv2d(3, num_filters, 4, 2, 1)
+        self.conv2 = nn.Conv2d(num_filters, num_filters * 2, 4, 2, 1)
+        self.bn2 = nn.BatchNorm2d(num_filters * 2)
+        self.conv3 = nn.Conv2d(num_filters * 2, num_filters * 4, 4, 2, 1)
+        self.bn3 = nn.BatchNorm2d(num_filters * 4)
+        self.conv4 = nn.Conv2d(num_filters * 4, num_filters * 8, 4, 2, 1)
+        self.bn4 = nn.BatchNorm2d(num_filters * 8)
+        self.conv5 = nn.Conv2d(num_filters * 8, num_filters, 4, 1, 0)
+
+        self.discrim_linear = nn.Linear(num_filters, 1)
+        self.sigmoid = nn.Sigmoid()
+
+        self.aux_linear = nn.Linear(num_filters, num_labels)
+        self.softmax = nn.Softmax()
 
     # weight_init
     def weight_init(self, mean, std):
         for m in self._modules:
             normal_init(self._modules[m], mean, std)
 
-    # forward method
-    # def forward(self, input):
-    def forward(self, input, label):
-        x = F.leaky_relu(self.conv1_1(input), 0.2)
-        y = F.leaky_relu(self.conv1_2(label), 0.2)
-        x = torch.cat([x, y], 1)
-        x = F.leaky_relu(self.conv2_bn(self.conv2(x)), 0.2)
-        x = F.leaky_relu(self.conv3_bn(self.conv3(x)), 0.2)
-        # x = F.sigmoid(self.conv4(x))
-        x = F.leaky_relu(self.conv4_bn(self.conv4(x)), 0.2)
-        x = F.sigmoid(self.conv5(x))
+    def forward(self, x):
+        x = F.leaky_relu(self.conv1(x), 0.2)
+        x = F.leaky_relu(self.bn2(self.conv2(x)), 0.2)
+        x = F.leaky_relu(self.bn3(self.conv3(x)), 0.2)
+        x = F.leaky_relu(self.bn4(self.conv4(x)), 0.2)
+        x = self.conv5(x)
 
-        return x
+        x = x.view(-1, self.num_filters)
+
+        discrim = self.discrim_linear(x)
+        discrim = self.sigmoid(discrim)
+
+        aux = self.aux_linear(x)
+        aux = self.softmax(aux)
+
+        return discrim, aux
 
 if __name__ == '__main__':
     test_influencers_lstm()

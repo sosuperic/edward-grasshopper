@@ -7,17 +7,21 @@ class HParams():
         # Training
         self.batch_size = 16
         self.lr = 0.001
-        self.max_nepochs = 1
+        self.max_nepochs = 10
         self.save_every_nepochs = 1
 
         # Model
         self.img_size = 64
-        self.lstm_emb_size = 512
+        self.lstm_emb_size = 512        # size of linear layer before LSTM
         self.lstm_hidden_size = 128
-        self.d = 100
+        self.d_num_filters = 64             # number of filters for first conv in Discriminator
+        self.z_size = 128                   # size of noise vector for Generator
+        self.g_num_filters = 64             # number of filters for first conv in Generator
 
         # Other
-        self.load_model_fp = None
+        self.load_lstm_fp = None
+        self.load_G_fp = None
+        self.load_D_fp = None
 
 
 # Wikiart general
