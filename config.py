@@ -5,13 +5,16 @@ class HParams():
     def __init__(self):
 
         # Training
-        self.batch_size = 64
+        self.batch_size = 16
         self.lr = 0.001
         self.max_nepochs = 1
         self.save_every_nepochs = 1
 
         # Model
         self.img_size = 64
+        self.lstm_emb_size = 512
+        self.lstm_hidden_size = 128
+        self.d = 100
 
         # Other
         self.load_model_fp = None
@@ -36,6 +39,7 @@ WIKIART_PAINTINGS_PCA_STYLE = 'data/wikiart_paintings_PCA/PCA_style.pkl'
 PCA_CONTENT_DIM = 1024
 PCA_STYLE_DIM = 1024
 WIKIART_ARTIST_EMBEDDINGS_PATH = 'data/wikiart_artist_embs'
+WIKIART_ARTIST_INFLUENCERS_EMBEDDINGS_PATH = 'data/wikiart_artist_influencers_embs'
 
 # Network, Models
 SAVED_MODELS_PATH = 'checkpoints/'

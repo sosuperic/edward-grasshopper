@@ -52,24 +52,22 @@ class InfluencersLSTM(nn.Module):
     def forward(self, x):
         """
         Inputs:
-        - x: expected (seq_len, batch, input_size)
+        - x: PackedSequence
         """
-        # Save so we can reshape back after linear layer
-        seq_len, batch_size, input_size = x.size(0), x.size(1), x.size(2)
-
-        # Apply linear layer to input first
-        # Have to reshape so that linear is applied to each sequence+batch item separately
-        x = x.view(seq_len, batch_size * input_size)            # reshape to (seq_len, batch * input_size)
-        x = nn.Linear(batch_size * input_size, batch_size * self.emb_size)(x)     # (seq_len, batch * emb_size)
-        x = x.view(seq_len, batch_size, self.emb_size)                     # (seq_len, batch, emb_size)
+        # Apply linear layer to data and then re-pack it
+        # Note: we are manually creating PackedSequence here using already packed x.data (and applying a linear
+        # layer to it). x.data is 2D
+        # This is despite the docs saying not to create it manually, but rather use pack_padded_sequence, which
+        # we did do to create x originally. But this seems the most straight forward way
+        lin_layer = nn.Linear(x.data.size(1), self.emb_size)
+        packed = nn.utils.rnn.PackedSequence(lin_layer(x.data), x.batch_sizes)
 
         # Pass into LSTM
-        output, (h_n, c_n) = self.lstm(x)
+        output, (h_n, c_n) = self.lstm(packed)
         # output: (seq_len, batch, hidden_size * num_directions)
         # h_n: (num_layers * num_directions, batch, hidden_size)
         # c_n: (num_layers * num_directions, batch, hidden_size)
         influencer_emb = torch.cat((h_n, c_n), 2)       # (num_layers * num_directions, batch, 2 * hidden_size)
-        influencer_emb = influencer_emb.view(batch_size, -1)    # (batch, final_emb_size)
 
         return influencer_emb
 

@@ -10,7 +10,7 @@ from network import Network
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-mode', dest='mode', action='store_true', help='train,generate')
+    parser.add_argument('--mode', dest='mode', default='train', help='train,generate')
     parser.add_argument('--influencers', dest='influencers', default=None,
                         help='Comma-separated list of artist-names. Used when generating')
     parser.add_argument('-lr', dest='lr', default=None)

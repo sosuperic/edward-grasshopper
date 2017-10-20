@@ -9,6 +9,7 @@ import json
 
 from config import WIKIART_INFLUENCE_GRAPH_FILTERED_PATH
 
+
 def get_valid_artist_names():
     """Return names of all artists that are found in main part of influence graph, as filtered using Peter's tool"""
     # Load filtered data
