@@ -136,6 +136,8 @@ class Generator(nn.Module):
         self.tanh = nn.Tanh()
 
         # First layers operating on z
+
+        # self.conv1_z = nn.convTranspose
         self.conv1_z = nn.ConvTranspose2d(z_size, num_filters * 4, 4, 1, 0)
         self.bn1_z = nn.BatchNorm2d(num_filters * 4)
         self.conv2_z = nn.ConvTranspose2d(num_filters * 4, num_filters * 2, 4, 2, 1)

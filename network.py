@@ -6,6 +6,7 @@ Available classes:
 """
 
 from datetime import datetime
+import json
 import numpy as np
 import os
 import pickle
@@ -104,18 +105,29 @@ class Network(object):
 
         return packed_sequence, sorted_artists
 
-    def get_artists_one_hot(self, artist_batch):
-        """
-        Return Variable one hot embedding for batch of artists (batch, num_artists)
-        """
-        one_hots = []
-        for artist in artist_batch:
-            one_hot = WikiartDataset.get_artist_one_hot_embedding(artist)
-            one_hots.append(one_hot)
-        one_hots = np.array(one_hots)
-        one_hots = Variable(torch.Tensor(one_hots))
-        return one_hots
+    # def get_artists_one_hot(self, artist_batch):
+    #     """
+    #     Return Variable one hot embedding for batch of artists (batch, num_artists)
+    #     """
+    #     one_hots = []
+    #     for artist in artist_batch:
+    #         one_hot = WikiartDataset.get_artist_one_hot_embedding(artist)
+    #         one_hots.append(one_hot)
+    #     one_hots = np.array(one_hots)
+    #     one_hots = Variable(torch.Tensor(one_hots))
+    #     return one_hots
 
+    def get_artists_targets(self, artist_batch):
+        """
+        Return Variable for batch of artists: (num_artists), where value is index in [0, num_artists-1]
+        """
+        targets = []
+        for artist in artist_batch:
+            target = WikiartDataset.get_artist_one_hot_index(artist)
+            targets.append(target)
+        targets = np.array(targets)
+        targets = Variable(torch.Tensor(targets))
+        return targets
 
     def train(self):
         """Train on training data split"""
@@ -133,6 +145,10 @@ class Network(object):
         os.mkdir(out_dir_imgs)
         print 'Checkpoints will be saved to: {}'.format(out_dir)
 
+        # Save hyperparmas
+        with open(os.path.join(out_dir, 'hp.json'), 'w') as f:
+            json.dump(vars(self.hp), f)
+
         # Get Tensorboard summary writer
         writer = SummaryWriter(out_dir)
 
@@ -141,12 +157,13 @@ class Network(object):
         # valid_data_loader = get_you_data_loader('valid', hp.batch_size)
 
         # Set up loss
-        D_criterion = nn.BCELoss()
+        D_discrim_criterion = nn.BCELoss()
+        D_aux_criterion = nn.CrossEntropyLoss()
 
         # Adam optimizer
-        LSTM_optimizer = optim.Adam(self.influencers_lstm.parameters(), lr=self.hp.lr, betas=(0.5, 0.999))
-        G_optimizer = optim.Adam(self.artist_G.parameters(), lr=self.hp.lr, betas=(0.5, 0.999))
-        D_optimizer = optim.Adam(self.artist_D.parameters(), lr=self.hp.lr, betas=(0.5, 0.999))
+        LSTM_optimizer = optim.Adam(self.influencers_lstm.parameters(), lr=0.001, betas=(0.5, 0.999))
+        G_optimizer = optim.Adam(self.artist_G.parameters(), lr=0.001, betas=(0.5, 0.999))
+        D_optimizer = optim.Adam(self.artist_D.parameters(), lr=0.0001, betas=(0.5, 0.999))
 
         # Test by creating images for same artist every _ iterations
         test_artist_batch = ['piet-mondrian']        # TODO: add more
@@ -168,9 +185,14 @@ class Network(object):
 
                 # For each image, we have to get the artist and their influencer embeddings
                 batch_influencers_emb, sorted_artists = self.get_influencers_emb(artist_batch)
+                if torch.cuda.is_available():
+                    batch_influencers_emb = batch_influencers_emb.cuda()
 
                 # Get one hot artist labels for auxiliary classification loss
-                one_hots = self.get_artists_one_hot(sorted_artists)
+                # one_hots = self.get_artists_one_hot(sorted_artists).type(torch.LongTensor)
+                targets = self.get_artists_targets(sorted_artists).type(torch.LongTensor)
+                if torch.cuda.is_available():
+                    targets = targets.cuda()
 
                 ######################################################################
                 # 1) UPDATE D NETWORK: maximize log(D(x)) + log(1 - D(G(z)))
@@ -182,8 +204,8 @@ class Network(object):
                 ######################################################################
                 discrim, aux = self.artist_D(Variable(img_batch))
                 real_labels = Variable(torch.ones(batch_size, 1))
-                loss_D_real_discrim = D_criterion(discrim, real_labels)
-                loss_D_real_aux = D_criterion(aux, one_hots)
+                loss_D_real_discrim = D_discrim_criterion(discrim, real_labels)
+                loss_D_real_aux = D_aux_criterion(aux, targets)
                 loss_D_real = loss_D_real_discrim + loss_D_real_aux
                 loss_D_real.backward()
 
@@ -194,7 +216,11 @@ class Network(object):
                 noise = Variable(noise)
 
                 # Get influencers embedding
+                self.influencers_lstm.zero_grad()
                 lstm_init_h, lstm_init_c = self.influencers_lstm.init_hidden()  # clear out hidden states
+                if torch.cuda.is_available():
+                    lstm_init_h = lstm_init_h.cuda()
+                    lstm_init_c = lstm_init_c.cuda()
                 batch_influencers_emb = self.influencers_lstm(batch_influencers_emb,
                                                               lstm_init_h,
                                                               lstm_init_c)  # (num_layers * num_directions, batch, 2 * hidden_size)
@@ -203,10 +229,9 @@ class Network(object):
                 # Pass through Generator, then get loss from discriminator and backprop
                 fake_imgs = self.artist_G(noise, batch_influencers_emb)
                 fake_labels = Variable(torch.zeros(batch_size, 1))
-                # discrim, aux = self.artist_D(fake_imgs)  # TODO: why detach?
-                discrim, aux = self.artist_D(fake_imgs.detach())  # TODO: why detach?
-                loss_D_fake_discrim = D_criterion(discrim, fake_labels)
-                loss_D_fake_aux = D_criterion(aux, one_hots)
+                discrim, aux = self.artist_D(fake_imgs.detach())      # detach so it doesn't update G I believe
+                loss_D_fake_discrim = D_discrim_criterion(discrim, fake_labels)
+                loss_D_fake_aux = D_aux_criterion(aux, targets)
                 loss_D_fake = loss_D_fake_discrim + loss_D_fake_aux
                 loss_D_fake.backward()
                 # D_G_z1 = output.data.mean()
@@ -216,13 +241,13 @@ class Network(object):
                 D_optimizer.step()
 
                 ######################################################################
-                # 2) UPDATE G NETWORK: maximize log(D(G(z))), i.e. want to fool D
+                # 2) UPDATE G NETWORK: maximize log(D(G(z))), i.e. want D(G(z)) to be 1's
                 ######################################################################
                 self.artist_G.zero_grad()
-                real_labels = Variable(torch.ones(batch_size, 1))   # fake labels are real for generator cost
-                discrim, aux = self.artist_D(fake_imgs)    # now that D's been updated
-                loss_G_discrim = D_criterion(discrim, real_labels)
-                loss_G_aux = D_criterion(aux, one_hots)
+                discrim, aux = self.artist_D(fake_imgs)                # now that D's been updated
+                real_labels = Variable(torch.ones(batch_size, 1))      # fake labels are real for generator cost
+                loss_G_discrim = D_discrim_criterion(discrim, real_labels)     # To train G, want D to think images are real, so use torch.ones. Minimize cross entropy between discrim and ones.
+                loss_G_aux = D_aux_criterion(aux, targets)
                 loss_G = loss_G_discrim + loss_G_aux
                 loss_G.backward()
                 G_optimizer.step()
@@ -242,6 +267,7 @@ class Network(object):
 
                 # Save images, remembering to normalize back to [0,1]
                 # Generate a fake one with fixed noise and for test artists
+                # Also save model
                 if train_idx % 100 == 0:
                     print 'Epoch {} - {}'.format(e, train_idx)
 
@@ -263,7 +289,11 @@ class Network(object):
                     tboard_name = '_'.join(test_artist_batch)
                     writer.add_image(tboard_name, tboard_image, train_idx)  # TODO: should this be e * n + train_idx?
 
-                break
+                    # Save
+                    if e % self.hp.save_every_nepochs == 0:
+                        torch.save(self.influencers_lstm.state_dict(), os.path.join(out_dir, 'lstm_e{}.pt'.format(e)))
+                        torch.save(self.artist_G.state_dict(), os.path.join(out_dir, 'G_e{}.pt'.format(e)))
+                        torch.save(self.artist_D.state_dict(), os.path.join(out_dir, 'D_e{}.pt'.format(e)))
 
             # Write parameters to Tensorboard every epoch
             for name, param in self.influencers_lstm.named_parameters():
@@ -273,11 +303,7 @@ class Network(object):
             for name, param in self.artist_D.named_parameters():
                 writer.add_histogram('D-' + name, param.clone().cpu().data.numpy(), e * train_data_loader.__len__() + train_idx)
 
-            # Save
-            if e % self.hp.save_every_nepochs == 0:
-                torch.save(self.influencers_lstm.state_dict(), os.path.join(out_dir, 'lstm_e{}.pt'.format(e)))
-                torch.save(self.artist_G.state_dict(), os.path.join(out_dir, 'G_e{}.pt'.format(e)))
-                torch.save(self.artist_D.state_dict(), os.path.join(out_dir, 'D_e{}.pt'.format(e)))
+
 
         writer.close()
 

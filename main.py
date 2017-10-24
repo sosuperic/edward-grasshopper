@@ -14,11 +14,14 @@ if __name__ == '__main__':
     parser.add_argument('--influencers', dest='influencers', default=None,
                         help='Comma-separated list of artist-names. Used when generating')
     parser.add_argument('-lr', dest='lr', default=None)
+    parser.add_argument('--notes', dest='notes', default=None,
+                        help='helpful to save some notes about this experiment (i.e. changes made)')
     cmdline = parser.parse_args()
 
     # Load default hyperparameters and update
     hparams = HParams()
     hparams.lr = cmdline.lr if cmdline.lr is not None else hparams.lr
+    hparams.notes = cmdline.notes
 
     net = Network(hparams)
     if cmdline.mode == 'train':

@@ -12,11 +12,11 @@ class HParams():
 
         # Model
         self.img_size = 64
-        self.lstm_emb_size = 512        # size of linear layer before LSTM
+        self.lstm_emb_size = 512                # size of linear layer before LSTM
         self.lstm_hidden_size = 128
-        self.d_num_filters = 64             # number of filters for first conv in Discriminator
-        self.z_size = 128                   # size of noise vector for Generator
-        self.g_num_filters = 64             # number of filters for first conv in Generator
+        self.d_num_filters = 64                 # number of filters for first conv in Discriminator
+        self.z_size = 128                       # size of noise vector for Generator
+        self.g_num_filters = 128                # number of filters for first conv in Generator
 
         # Other
         self.load_lstm_fp = None

@@ -39,9 +39,10 @@ class WikiartDataset(Dataset):
     - artist_fns: list of tuple of artist_name and image_fn
     """
 
-    def __init__(self, transform=None):
+    def __init__(self, transform=None, split=None):
         print 'Initializing dataset'
         self.transform = transform
+        self.split = split
 
         self.artist_fns = []
         valid_artists = os.listdir(WIKIART_ARTIST_INFLUENCERS_EMBEDDINGS_PATH)
@@ -65,7 +66,21 @@ class WikiartDataset(Dataset):
                     if img_fn.split('.')[0] == title:
                         self.artist_fns.append((artist, img_fn))
 
+        # Get subset of data
+        self.artist_fns = self.extract_split(self.artist_fns, split)
+
         print 'Done initializing dataset'
+
+    def extract_split(self, fns, split):
+        """Return subset of fns (list of filenames) corresponding to that split"""
+        n = len(fns)
+        if split == 'train':
+            fns = fns[:int(0.8 * n)]
+        elif split == 'valid':
+            fns = fns[int(0.8 * n):int(0.9 * n)]
+        elif split == 'test':
+            fns = fns[int(0.9 * n):]
+        return fns
 
     def __len__(self):
         """Return number of data points"""
@@ -87,13 +102,12 @@ class WikiartDataset(Dataset):
         return img, artist
 
     @staticmethod
-    def get_artist_one_hot_embedding(artist):
-        """Return np one-hot vector for artist"""
+    def get_artist_one_hot_index(artist):
+        """Return index of artist"""
         valid_artists = os.listdir(WIKIART_ARTIST_INFLUENCERS_EMBEDDINGS_PATH)
         valid_artists = sorted(valid_artists)
-        one_hot = np.zeros(len(valid_artists))
-        one_hot[valid_artists.index(artist)] = 1
-        return one_hot
+        index = valid_artists.index(artist)
+        return index
 
     @staticmethod
     def get_num_valid_artists():
@@ -101,7 +115,7 @@ class WikiartDataset(Dataset):
         n = len(os.listdir(WIKIART_ARTIST_INFLUENCERS_EMBEDDINGS_PATH))
         return n
 
-def get_wikiart_data_loader(batch_size, img_scale_size):
+def get_wikiart_data_loader(batch_size, img_scale_size, split=None):
     """Return data loader for the wikiart Dataset. Uses CenterCrop instead of RandomCrop"""
     normalize = transforms.Normalize(mean=[0.518804936264, 0.455788331489, 0.388189828956],
                                      std=[0.175493882268, 0.177110228715, 0.185269485347])
@@ -111,7 +125,7 @@ def get_wikiart_data_loader(batch_size, img_scale_size):
         # transforms.CenterCrop(img_scale_size),
         transforms.ToTensor(),
         normalize])
-    dataset = WikiartDataset(transform=transform)
+    dataset = WikiartDataset(transform=transform, split=split)
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     return data_loader
@@ -223,13 +237,13 @@ def counting_stats():
     print 'Total number of paintings: {}'.format(num_paintings.sum())
 
 if __name__ == '__main__':
-    calculate_per_channel_mean_std()
+    # calculate_per_channel_mean_std()
     # save_influencers_embeddings()
     # counting_stats()
 
     # Test
-    # dl = get_wikiart_data_loader(4, 64)
-    # for img_batch, artist_batch in dl:
-    #     print img_batch
-    #     print artist_batch
-    #     break
+    dl = get_wikiart_data_loader(4, 64, 'valid')
+    for img_batch, artist_batch in dl:
+        print img_batch
+        print artist_batch
+        break
