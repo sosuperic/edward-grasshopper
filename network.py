@@ -253,106 +253,105 @@ class Network(object):
 
                 loss_D_real_discrim = D_discrim_criterion(discrim, real_labels)
                 loss_D_real_aux = D_aux_criterion(aux, targets)
-                # loss_D_real = loss_D_real_discrim + loss_D_real_aux
-                # loss_D_real.backward()
-                # pdb.set_trace()
+                loss_D_real = loss_D_real_discrim + loss_D_real_aux
+                loss_D_real.backward()
 
-                # Train D to be a classifier (comment out above loss_D_real lines, skip rest of D and G)
-                loss_D_real_aux.backward()
-                D_optimizer.step()
-                if train_idx % 10 == 0:
-                    writer.add_scalar('loss_D_real_aux', loss_D_real_aux.clone().cpu().data.numpy(),
-                                      e * train_data_loader.__len__() + train_idx)
-
-                # ######################################################################
-                # #       Next update D with fake images, i.e. log(1 - D(G(z)))
-                # ######################################################################
-                # # Get influencers embedding
-                # if self.hp.infl_type == 'ff':
-                #     self.influencers_model.zero_grad()
-                #     batch_influencers_emb = self.influencers_model(batch_influencers_emb)  # no lstm case, don't need lengths
-                # elif self.hp.infl_type == 'lstm':
-                #     self.influencers_lstm.lstm.zero_grad()
-                #     self.influencers_lstm.lin_layer.zero_grad()
-                #     lstm_init_h, lstm_init_c = self.influencers_lstm.init_hidden(batch_size)  # clear out hidden states
-                #     if torch.cuda.is_available():
-                #         lstm_init_h = lstm_init_h.cuda()
-                #         lstm_init_c = lstm_init_c.cuda()
-                #     batch_influencers_emb = self.influencers_lstm(batch_influencers_emb, lengths,
-                #                                                   lstm_init_h, lstm_init_c)
-                #     # (num_layers * num_directions, batch, 2 * hidden_size)
-                # batch_influencers_emb = batch_influencers_emb.view(batch_size, -1, 1, 1)  # (batch, ..., 1, 1)
-                #
-                # # Pass through Generator, then get loss from discriminator and backprop
-                # noise = torch.FloatTensor(batch_size, self.hp.z_size, 1, 1).normal_(0, 1)
-                # noise = Variable(noise)
-                # if torch.cuda.is_available():
-                #     noise = noise.cuda()
-                # fake_imgs = self.artist_G(noise, batch_influencers_emb)
-                #
-                # instance_noise = torch.normal(torch.zeros(img_batch.size()), torch.zeros(img_batch.size()).fill_(0.05))
-                # if torch.cuda.is_available():
-                #     instance_noise = instance_noise.cuda()
-                # fake_imgs = fake_imgs + Variable(instance_noise)
-                # fake_labels = Variable(torch.zeros(batch_size, 1))
-                # if torch.cuda.is_available():
-                #     fake_labels = fake_labels.cuda()
-                #
-                # discrim, aux = self.artist_D(fake_imgs.detach())
-                # loss_D_fake_discrim = D_discrim_criterion(discrim, fake_labels)
-                # loss_D_fake_aux = D_aux_criterion(aux, targets)
-                # loss_D_fake = loss_D_fake_discrim + loss_D_fake_aux
-                # loss_D_fake.backward()
-                # # D_G_z1 = output.data.mean()
-                # # loss_D = loss_D_real + loss_D_fake
-                #
-                # # Don't perform gradient descent step if D is too well-trained
-                # # TODO: should we have this
-                # if (last_loss_D_fake_discrim > 0.3) and (last_loss_D_real_discrim > 0.3):
-                #     D_optimizer.step()
-                # last_loss_D_fake_discrim = loss_D_fake_discrim.data[0]
-                # last_loss_D_real_discrim = loss_D_real_discrim.data[0]
-                #
-                # ######################################################################
-                # # 2) UPDATE G NETWORK: maximize log(D(G(z))), i.e. want D(G(z)) to be 1's
-                # ######################################################################
-                # self.influencers_model.zero_grad()
-                # self.artist_G.zero_grad()
-                # discrim, aux = self.artist_D(fake_imgs)  # now that D's been updated
-                # real_labels = Variable(torch.ones(batch_size, 1))  # fake labels are real for generator cost
-                # if torch.cuda.is_available():
-                #     real_labels = real_labels.cuda()
-                # loss_G_discrim = D_discrim_criterion(discrim,
-                #                                      real_labels)  # To train G, want D to think images are real, so use torch.ones. Minimize cross entropy between discrim and ones.
-                # loss_G_aux = D_aux_criterion(aux, targets)
-                # loss_G = loss_G_discrim + loss_G_aux
-                # loss_G.backward()
-                # infl_optimizer.step()
-                # G_optimizer.step()
-                #
-                # # Write loss to Tensorboard
+                # # Train D to be a classifier (comment out above loss_D_real lines, skip rest of D and G)
+                # loss_D_real_aux.backward()
+                # D_optimizer.step()
                 # if train_idx % 10 == 0:
-                #     writer.add_scalar('loss_D_fake_discrim', loss_D_fake_discrim.clone().cpu().data.numpy(),
-                #                       e * train_data_loader.__len__() + train_idx)
-                #     writer.add_scalar('loss_D_fake_aux', loss_D_fake_aux.clone().cpu().data.numpy(),
-                #                       e * train_data_loader.__len__() + train_idx)
-                #     # writer.add_scalar('loss_D_fake', loss_D_fake.clone().cpu().data.numpy(),
-                #     #                   e * train_data_loader.__len__() + train_idx)
-                #     writer.add_scalar('loss_D_real_discrim', loss_D_real_discrim.clone().cpu().data.numpy(),
-                #                       e * train_data_loader.__len__() + train_idx)
                 #     writer.add_scalar('loss_D_real_aux', loss_D_real_aux.clone().cpu().data.numpy(),
                 #                       e * train_data_loader.__len__() + train_idx)
-                #     # writer.add_scalar('loss_D_real', loss_D_real.clone().cpu().data.numpy(),
-                #     #                   e * train_data_loader.__len__() + train_idx)
-                #     # writer.add_scalar('loss_D', loss_D.clone().cpu().data.numpy(),
-                #     #                   e * train_data_loader.__len__() + train_idx)
-                #     writer.add_scalar('loss_G_discrim', loss_G_discrim.clone().cpu().data.numpy(),
-                #                       e * train_data_loader.__len__() + train_idx)
-                #     writer.add_scalar('loss_G_aux', loss_G_aux.clone().cpu().data.numpy(),
-                #                       e * train_data_loader.__len__() + train_idx)
-                #     # writer.add_scalar('loss_G', loss_G.clone().cpu().data.numpy(),
-                #     #                   e * train_data_loader.__len__() + train_idx)
-                #
+
+                ######################################################################
+                #       Next update D with fake images, i.e. log(1 - D(G(z)))
+                ######################################################################
+                # Get influencers embedding
+                if self.hp.infl_type == 'ff':
+                    self.influencers_model.zero_grad()
+                    batch_influencers_emb = self.influencers_model(batch_influencers_emb)  # no lstm case, don't need lengths
+                elif self.hp.infl_type == 'lstm':
+                    self.influencers_lstm.lstm.zero_grad()
+                    self.influencers_lstm.lin_layer.zero_grad()
+                    lstm_init_h, lstm_init_c = self.influencers_lstm.init_hidden(batch_size)  # clear out hidden states
+                    if torch.cuda.is_available():
+                        lstm_init_h = lstm_init_h.cuda()
+                        lstm_init_c = lstm_init_c.cuda()
+                    batch_influencers_emb = self.influencers_lstm(batch_influencers_emb, lengths,
+                                                                  lstm_init_h, lstm_init_c)
+                    # (num_layers * num_directions, batch, 2 * hidden_size)
+                batch_influencers_emb = batch_influencers_emb.view(batch_size, -1, 1, 1)  # (batch, ..., 1, 1)
+
+                # Pass through Generator, then get loss from discriminator and backprop
+                noise = torch.FloatTensor(batch_size, self.hp.z_size, 1, 1).normal_(0, 1)
+                noise = Variable(noise)
+                if torch.cuda.is_available():
+                    noise = noise.cuda()
+                fake_imgs = self.artist_G(noise, batch_influencers_emb)
+
+                instance_noise = torch.normal(torch.zeros(img_batch.size()), torch.zeros(img_batch.size()).fill_(0.05))
+                if torch.cuda.is_available():
+                    instance_noise = instance_noise.cuda()
+                fake_imgs = fake_imgs + Variable(instance_noise)
+                fake_labels = Variable(torch.zeros(batch_size, 1))
+                if torch.cuda.is_available():
+                    fake_labels = fake_labels.cuda()
+
+                discrim, aux = self.artist_D(fake_imgs.detach())
+                loss_D_fake_discrim = D_discrim_criterion(discrim, fake_labels)
+                loss_D_fake_aux = D_aux_criterion(aux, targets)
+                loss_D_fake = loss_D_fake_discrim + loss_D_fake_aux
+                loss_D_fake.backward()
+                # D_G_z1 = output.data.mean()
+                # loss_D = loss_D_real + loss_D_fake
+
+                # Don't perform gradient descent step if D is too well-trained
+                # TODO: should we have this
+                if (last_loss_D_fake_discrim > 0.3) and (last_loss_D_real_discrim > 0.3):
+                    D_optimizer.step()
+                last_loss_D_fake_discrim = loss_D_fake_discrim.data[0]
+                last_loss_D_real_discrim = loss_D_real_discrim.data[0]
+
+                ######################################################################
+                # 2) UPDATE G NETWORK: maximize log(D(G(z))), i.e. want D(G(z)) to be 1's
+                ######################################################################
+                self.influencers_model.zero_grad()
+                self.artist_G.zero_grad()
+                discrim, aux = self.artist_D(fake_imgs)  # now that D's been updated
+                real_labels = Variable(torch.ones(batch_size, 1))  # fake labels are real for generator cost
+                if torch.cuda.is_available():
+                    real_labels = real_labels.cuda()
+                loss_G_discrim = D_discrim_criterion(discrim,
+                                                     real_labels)  # To train G, want D to think images are real, so use torch.ones. Minimize cross entropy between discrim and ones.
+                loss_G_aux = D_aux_criterion(aux, targets)
+                loss_G = loss_G_discrim + loss_G_aux
+                loss_G.backward()
+                infl_optimizer.step()
+                G_optimizer.step()
+
+                # Write loss to Tensorboard
+                if train_idx % 10 == 0:
+                    writer.add_scalar('loss_D_fake_discrim', loss_D_fake_discrim.clone().cpu().data.numpy(),
+                                      e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('loss_D_fake_aux', loss_D_fake_aux.clone().cpu().data.numpy(),
+                                      e * train_data_loader.__len__() + train_idx)
+                    # writer.add_scalar('loss_D_fake', loss_D_fake.clone().cpu().data.numpy(),
+                    #                   e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('loss_D_real_discrim', loss_D_real_discrim.clone().cpu().data.numpy(),
+                                      e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('loss_D_real_aux', loss_D_real_aux.clone().cpu().data.numpy(),
+                                      e * train_data_loader.__len__() + train_idx)
+                    # writer.add_scalar('loss_D_real', loss_D_real.clone().cpu().data.numpy(),
+                    #                   e * train_data_loader.__len__() + train_idx)
+                    # writer.add_scalar('loss_D', loss_D.clone().cpu().data.numpy(),
+                    #                   e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('loss_G_discrim', loss_G_discrim.clone().cpu().data.numpy(),
+                                      e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('loss_G_aux', loss_G_aux.clone().cpu().data.numpy(),
+                                      e * train_data_loader.__len__() + train_idx)
+                    # writer.add_scalar('loss_G', loss_G.clone().cpu().data.numpy(),
+                    #                   e * train_data_loader.__len__() + train_idx)
+
 
                 # Save images, remembering to normalize back to [0,1]
                 # Generate a fake one with fixed noise and for test artists

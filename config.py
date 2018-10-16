@@ -34,7 +34,7 @@ class HParams():
 
 # Manually selected list of artists to train on (number of images is also given)
 # Train on thirty instead of 202
-TRAIN_ON_ALL = False
+TRAIN_ON_ALL = True
 THIRTY_ARTISTS = [(251, 'gustave-courbet'),
  (258, 'lucian-freud'),
  (273, 'jean-auguste-dominique-ingres'),
