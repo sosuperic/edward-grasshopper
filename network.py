@@ -167,7 +167,10 @@ class Network(object):
             cur_epoch = self.hp.cur_epoch
         else:
             # Make directory to store outputs
-            out_dir = os.path.join(SAVED_MODELS_PATH, datetime.now().strftime('%B%d_%H-%M-%S'))
+            out_dir_name = datetime.now().strftime('%B%d_%H-%M-%S')
+            if hasattr(self.hp, 'notes'):
+                out_dir_name += '_' + self.hp.notes
+            out_dir = os.path.join(SAVED_MODELS_PATH, out_dir_name)
             out_dir_imgs = os.path.join(out_dir, 'imgs')
             os.mkdir(out_dir)
             os.mkdir(out_dir_imgs)
