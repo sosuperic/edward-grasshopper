@@ -6,7 +6,7 @@ class HParams():
 
         # Training
         self.batch_size = 32
-        self.lr_lstm = 0.01
+        self.lr_infl = 0.01
         self.lr_G = 0.0002
         self.lr_D = 0.0002
         self.D_iters = 5                        # number of times to train Wasserstein critic for one G update
@@ -15,14 +15,15 @@ class HParams():
 
         # Model
         self.img_size = 124
+        self.infl_type = 'ff'  # ff or lstm
         self.lstm_emb_size = 512                # size of linear layer before LSTM
-        self.lstm_hidden_size = 128
+        self.infl_hidden_size = 128
         self.d_num_filters = [16, 32, 64, 128, 256, 512]                # number of filters for first conv in Discriminator
         self.z_size = 128                       # size of noise vector for Generator
         self.g_num_filters = [768, 384, 256, 192, 192]                # number of filters for first conv in Generator
 
         # Other
-        self.load_lstm_fp = None
+        self.load_infl_fp = None
         self.load_G_fp = None
         self.load_D_fp = None
         self.cur_epoch = None
