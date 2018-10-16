@@ -286,7 +286,7 @@ def print_artist_to_num_modes():
 
 if __name__ == '__main__':
     # Run TSNE
-    # artist = Artist('albrecht-durer')
+    # artist = Artist('pablo-picasso')
     # painting_embs, titles = artist.load_painting_embeddings()
     # artist.TSNE(painting_embs, titles, show=True)
 

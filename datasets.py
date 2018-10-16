@@ -17,10 +17,16 @@ Available functions:
     Calculate some basic stats on number of valid artists etc.
 """
 
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+plt.style.use('ggplot')
+import mpld3
 import numpy as np
 import os
+import pdb
 import pickle
 from PIL import Image
+from sklearn.manifold import TSNE
 
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
@@ -244,18 +250,69 @@ def counting_stats():
     num_paintings = np.array(num_paintings)
 
     print 'Number of artists: {}'.format(len(artists))
-    print 'Average number of modes per artist: {}'.format(num_modes.mean())
+    print 'Average number of influencer modes per artist: {}'.format(num_modes.mean())
     print 'Average number of paintings per artist: {}'.format(num_paintings.mean())
     print 'Total number of paintings: {}'.format(num_paintings.sum())
 
+    pdb.set_trace()
+
+
+def tsne_on_influencer_embs(show=True):
+    """
+    Run TSNE based on all the artists' influencer embeddings, as created by save_influencer_embeddings. We are pretty
+    confident that the painting embeddings and artist embeddings are good, based on artist.TSNE() in
+    artist_embeddings.py, which runs TSNE on all the painting embeddings for an indivdual artist, as similar
+    paintings are close together. This allows us to check if similar artists (or more specifically, artists
+    with similar influencers) are grouped together.
+
+    Returns:
+        tsne_emb: num_embs x 2 matrix (i.e. coordinates)
+    """
+
+    artists = os.listdir(WIKIART_ARTIST_INFLUENCERS_EMBEDDINGS_PATH)
+    influencers_embs = []
+    for artist in artists:
+        fp = os.path.join(WIKIART_ARTIST_INFLUENCERS_EMBEDDINGS_PATH, artist, 'embedding.pkl')
+        influencers_emb = pickle.load(open(fp, 'r'))  # [num_modes, emb_size]
+        # different artist may have a different number of influencer modes
+        # for the generative model, we are going to process the modes through a LSTM
+        # however, for the purpose of this sanity check, let's just take the mean of all the modes
+        influencers_emb = np.mean(influencers_emb, axis=0)  # [emb_size]
+        influencers_embs.append(influencers_emb)
+    X = np.array(influencers_embs)
+
+    model = TSNE(n_components=2, random_state=0, learning_rate=100)
+    np.set_printoptions(suppress=True)
+    tsne_emb = model.fit_transform(X)
+
+    if show:  # create scatter plot
+        x, y = tsne_emb[:, 0], tsne_emb[:, 1]
+        fig, ax = plt.subplots(subplot_kw=dict(axisbg='#EEEEEE'))
+        scatter = ax.scatter(x, y, alpha=0.3, cmap=plt.cm.jet)
+        ax.grid(color='white', linestyle='solid')
+        # ax.set_title('https://wikiart.org/en/{}'.format(self.name), size=20)
+        artist_to_info = pickle.load(open(WIKIART_ARTIST_TO_INFO_PATH, 'rb'))
+        labels = []
+        for artist in artists:
+            label = artist
+            if 'Born' in artist_to_info[artist]:
+                label += '_' + artist_to_info[artist]['Born'][0]
+            labels.append(label)
+        tooltip = mpld3.plugins.PointLabelTooltip(scatter, labels=labels)
+        mpld3.plugins.connect(fig, tooltip)
+        mpld3.show()
+
+    return tsne_emb
+
 if __name__ == '__main__':
-    calculate_per_channel_mean_std(train_on_all=False)
+    # calculate_per_channel_mean_std(train_on_all=False)
     # save_influencers_embeddings()
     # counting_stats()
+    tsne_on_influencer_embs(show=True)
 
     # Test
     # dl = get_wikiart_data_loader(4, 64, 'valid')
     # for img_batch, artist_batch in dl:
     #     print img_batch
     #     print artist_batch
-    #     break
+    #     pdb.set_trace()
