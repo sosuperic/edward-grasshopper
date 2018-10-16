@@ -125,17 +125,17 @@ class Generator(nn.Module):
         self.bn3_z = nn.BatchNorm2d(num_filters[2] / 2)
 
         # Don't use influencers emb
-        self.lin1 = nn.Linear(z_size, num_filters[0])
-        self.conv2_z = nn.ConvTranspose2d(num_filters[0], num_filters[1], 5, 2)
-        self.bn2_z = nn.BatchNorm2d(num_filters[1])
-        self.conv3_z = nn.ConvTranspose2d(num_filters[1], num_filters[2], 5, 2)
-        self.bn3_z = nn.BatchNorm2d(num_filters[2])
+        # self.lin1 = nn.Linear(z_size, num_filters[0])
+        # self.conv2_z = nn.ConvTranspose2d(num_filters[0], num_filters[1], 5, 2)
+        # self.bn2_z = nn.BatchNorm2d(num_filters[1])
+        # self.conv3_z = nn.ConvTranspose2d(num_filters[1], num_filters[2], 5, 2)
+        # self.bn3_z = nn.BatchNorm2d(num_filters[2])
 
         # First layers operating on influencers embedding (in parallel with above)
-        # self.conv2_inf = nn.ConvTranspose2d(influencers_emb_size, num_filters[1], 5, 2)
-        # self.bn2_inf = nn.BatchNorm2d(num_filters[1])
-        # self.conv3_inf = nn.ConvTranspose2d(num_filters[1], num_filters[2] / 2, 5, 2)
-        # self.bn3_inf = nn.BatchNorm2d(num_filters[2] / 2)
+        self.conv2_inf = nn.ConvTranspose2d(influencers_emb_size, num_filters[1], 5, 2)
+        self.bn2_inf = nn.BatchNorm2d(num_filters[1])
+        self.conv3_inf = nn.ConvTranspose2d(num_filters[1], num_filters[2] / 2, 5, 2)
+        self.bn3_inf = nn.BatchNorm2d(num_filters[2] / 2)
 
         # After fusion of z and influencers
         self.conv4 = nn.ConvTranspose2d(num_filters[2], num_filters[3], 5, 2)
@@ -167,14 +167,14 @@ class Generator(nn.Module):
         # z = self.relu(self.bn2_z(self.conv2_z(z)))
         # z = self.relu(self.bn3_z(self.conv3_z(z)))
 
-        # influencers_emb = F.leaky_relu(self.bn2_inf(self.conv2_inf(influencers_emb)), 0.2)
-        # influencers_emb = F.leaky_relu(self.bn3_inf(self.conv3_inf(influencers_emb)), 0.2)
+        influencers_emb = F.leaky_relu(self.bn2_inf(self.conv2_inf(influencers_emb)), 0.2)
+        influencers_emb = F.leaky_relu(self.bn3_inf(self.conv3_inf(influencers_emb)), 0.2)
         # influencers_emb = self.relu(self.bn2_inf(self.conv2_inf(influencers_emb)))
         # influencers_emb = self.relu(self.bn3_inf(self.conv3_inf(influencers_emb)))
 
         # Fuse
-        # x = torch.cat([z, influencers_emb], 1)      # (batch, filters, x, y)
-        x = z
+        x = torch.cat([z, influencers_emb], 1)      # (batch, filters, x, y)
+        # x = z  # if not using influencers emb
 
         x = F.leaky_relu(self.bn4(self.conv4(x)), 0.2)
         x = F.leaky_relu(self.bn5(self.conv5(x)), 0.2)

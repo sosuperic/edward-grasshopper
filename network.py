@@ -119,7 +119,9 @@ class Network(object):
                 x[:,i,:] = padded
 
         # Convert to Variable
-        x = Variable(torch.Tensor(x))
+        x = torch.Tensor(x)
+        # x = torch.zeros_like(x)  # debugging whether or not we should even have influencers embeddings
+        x = Variable(x)
         if torch.cuda.is_available():
             x = x.cuda()
 
@@ -287,6 +289,7 @@ class Network(object):
                 fake_labels = Variable(torch.zeros(batch_size, 1))
                 if torch.cuda.is_available():
                     fake_labels = fake_labels.cuda()
+
                 discrim, aux = self.artist_D(fake_imgs.detach())
                 loss_D_fake_discrim = D_discrim_criterion(discrim, fake_labels)
                 loss_D_fake_aux = D_aux_criterion(aux, targets)
