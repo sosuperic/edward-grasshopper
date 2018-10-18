@@ -245,10 +245,11 @@ class Network(object):
                 ######################################################################
                 # discrim, aux = self.artist_D(Variable(img_batch))
                 # Instance noise added to image is supposed to help GAN training
-                instance_noise = torch.normal(torch.zeros(img_batch.size()), torch.zeros(img_batch.size()).fill_(0.05))
-                if torch.cuda.is_available():
-                    instance_noise = instance_noise.cuda()
-                discrim, aux = self.artist_D(Variable(img_batch + instance_noise))
+                # instance_noise = torch.normal(torch.zeros(img_batch.size()), torch.zeros(img_batch.size()).fill_(0.05))
+                # if torch.cuda.is_available():
+                #     instance_noise = instance_noise.cuda()
+                # discrim, aux = self.artist_D(Variable(img_batch + instance_noise))
+                discrim, aux = self.artist_D(Variable(img_batch))
 
                 real_labels = torch.ones(batch_size, 1)
                 if torch.cuda.is_available():
@@ -293,10 +294,10 @@ class Network(object):
                     noise = noise.cuda()
                 fake_imgs = self.artist_G(noise, batch_influencers_emb)
 
-                instance_noise = torch.normal(torch.zeros(img_batch.size()), torch.zeros(img_batch.size()).fill_(0.05))
-                if torch.cuda.is_available():
-                    instance_noise = instance_noise.cuda()
-                fake_imgs = fake_imgs + Variable(instance_noise)
+                # instance_noise = torch.normal(torch.zeros(img_batch.size()), torch.zeros(img_batch.size()).fill_(0.05))
+                # if torch.cuda.is_available():
+                #     instance_noise = instance_noise.cuda()
+                # fake_imgs = fake_imgs + Variable(instance_noise)
                 fake_labels = Variable(torch.zeros(batch_size, 1))
                 if torch.cuda.is_available():
                     fake_labels = fake_labels.cuda()
