@@ -6,3 +6,7 @@
 
 data/
 checkpoints/
+
+commit.txt
+scp.sh
+wasserstein_attempts/
