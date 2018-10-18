@@ -179,7 +179,8 @@ class Discriminator(nn.Module):
         # Need this to define linear layer
         # h1 = math.floor()
         # Just hardcode for now
-        self.lin = nn.Linear(61952, num_labels + 1)# plus 1 for discrim # [16, 32, 64, 128, 256, 512]
+        self.discrim_lin = nn.Linear(61952, 1)# plus 1 for discrim # [16, 32, 64, 128, 256, 512]
+        self.aux_lin = nn.Linear(61952, num_labels)# plus 1 for discrim # [16, 32, 64, 128, 256, 512]
         # self.lin = nn.Linear(15488, num_labels + 1) # [16, 32, 64, 64, 128, 128]
         # self.lin = nn.Linear(1936, num_labels + 1) # [16, 32, 64, 64, 32, 16]
 
@@ -216,13 +217,18 @@ class Discriminator(nn.Module):
         x = F.leaky_relu(self.bn6(self.conv6(x)), 0.2)
 
         x = x.view(batch_size, -1)
-        # print x.size()
-        x = self.lin(x)  # (1, 203)
+        # # print x.size()
+        # x = self.lin(x)  # (1, 203)
 
-        # Use first element for discriminator, rest for auxiliary classifier
-        discrim = self.sigmoid(x[:,0])          # (batch, )
-        discrim = torch.unsqueeze(discrim, 1)   # (batch, 1)
-        aux = self.softmax(x[:,1:])             # (batch, num_labels)
+        discrim = self.discrim_lin(x)  # (batch, 1)
+        discrim = self.sigmoid(discrim)
+        aux = self.aux_lin(x)  # (batch, num_labels)
+        aux = self.softmax(aux)
+
+        # # Use first element for discriminator, rest for auxiliary classifier
+        # discrim = self.sigmoid(x[:,0])          # (batch, )
+        # discrim = torch.unsqueeze(discrim, 1)   # (batch, 1)
+        # aux = self.softmax(x[:,1:])             # (batch, num_labels)
 
         return discrim, aux
 
