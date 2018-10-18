@@ -18,9 +18,9 @@ class HParams():
         self.infl_type = 'ff'  # ff or lstm
         self.lstm_emb_size = 512                # size of linear layer before LSTM
         self.infl_hidden_size = 128
-        self.d_num_filters = [16, 32, 64, 128, 256, 512]                # number of filters for first conv in Discriminator
+        self.d_num_filters = [16, 32, 64, 128, 256, 512]
         self.z_size = 128                       # size of noise vector for Generator
-        self.g_num_filters = [768, 384, 256, 192, 192]                # number of filters for first conv in Generator
+        self.g_num_filters = [768, 384, 256, 192, 64]
 
         # Other
         self.load_infl_fp = None
