@@ -130,7 +130,13 @@ class Generator(nn.Module):
 
     def weight_init(self, mean, std):
         for m in self._modules:
-            normal_init(self._modules[m], mean, std)
+            classname = m.__class__.__name__
+            if classname.find('Conv') != -1:
+                m.weight.data.normal_(0.0, 0.02)
+            elif classname.find('BatchNorm') != -1:
+                m.weight.data.normal_(1.0, 0.02)
+                m.bias.data.fill_(0)
+            # normal_init(self._modules[m], mean, std)
 
     def forward(self, z, influencers_emb):
         """
@@ -204,7 +210,13 @@ class Discriminator(nn.Module):
     # weight_init
     def weight_init(self, mean, std):
         for m in self._modules:
-            normal_init(self._modules[m], mean, std)
+            classname = m.__class__.__name__
+            if classname.find('Conv') != -1:
+                m.weight.data.normal_(0.0, 0.02)
+            elif classname.find('BatchNorm') != -1:
+                m.weight.data.normal_(1.0, 0.02)
+                m.bias.data.fill_(0)
+            # normal_init(self._modules[m], mean, std)
 
     def forward(self, x):
         batch_size = x.size(0)
