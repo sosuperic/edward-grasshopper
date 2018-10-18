@@ -6,7 +6,7 @@ class HParams():
 
         # Training
         self.batch_size = 32
-        self.lr_infl = 0.001
+        self.lr_infl = 0.0002
         self.lr_G = 0.0002
         self.lr_D = 0.0002
         self.D_iters = 5                        # number of times to train Wasserstein critic for one G update

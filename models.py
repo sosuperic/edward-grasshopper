@@ -151,9 +151,7 @@ class Generator(nn.Module):
         comb = F.leaky_relu(self.bn3(self.conv3(comb)), 0.2)
         comb = F.leaky_relu(self.bn4(self.conv4(comb)), 0.2)
         comb = F.leaky_relu(self.bn5(self.conv5(comb)), 0.2)
-        comb = self.conv6(comb)
-
-        comb = self.tanh(comb)
+        comb = self.tanh(self.conv6(comb))
 
         return comb
 
@@ -224,7 +222,7 @@ class Discriminator(nn.Module):
         # Use first element for discriminator, rest for auxiliary classifier
         discrim = self.sigmoid(x[:,0])          # (batch, )
         discrim = torch.unsqueeze(discrim, 1)   # (batch, 1)
-        aux = self.softmax(x[:,1:], dim=1)             # (batch, num_labels)
+        aux = self.softmax(x[:,1:])             # (batch, num_labels)
 
         return discrim, aux
 
