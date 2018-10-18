@@ -311,13 +311,13 @@ class Network(object):
                 # loss_D = loss_D_real + loss_D_fake
 
                 # Don't perform gradient descent step if D is too well-trained
-                # TODO: should we have this
-                if (last_loss_D_fake_discrim > 0.3) and (last_loss_D_real_discrim > 0.3):
-                    D_optimizer.step()
-                    infl_optimizer.step()
+                # # TODO: should we have this
+                # if (last_loss_D_fake_discrim > 0.3) and (last_loss_D_real_discrim > 0.3):
+                D_optimizer.step()
+                infl_optimizer.step()
 
-                last_loss_D_fake_discrim = loss_D_fake_discrim.data[0]
-                last_loss_D_real_discrim = loss_D_real_discrim.data[0]
+                # last_loss_D_fake_discrim = loss_D_fake_discrim.data[0]
+                # last_loss_D_real_discrim = loss_D_real_discrim.data[0]
 
                 ######################################################################
                 # 2) UPDATE G NETWORK: maximize log(D(G(z))), i.e. want D(G(z)) to be 1's
