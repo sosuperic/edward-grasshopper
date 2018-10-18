@@ -120,7 +120,8 @@ class Network(object):
 
         # Convert to Variable
         x = torch.Tensor(x)
-        # x = torch.zeros_like(x)  # debugging whether or not we should even have influencers embeddings
+        if hasattr(self.hp, 'zero_infl_emb') and self.hp.zero_infl_emb:
+            x = torch.zeros_like(x)  # debugging whether or not we should even have influencers embeddings
         x = Variable(x)
         if torch.cuda.is_available():
             x = x.cuda()
@@ -312,14 +313,18 @@ class Network(object):
                 # TODO: should we have this
                 if (last_loss_D_fake_discrim > 0.3) and (last_loss_D_real_discrim > 0.3):
                     D_optimizer.step()
+
                 last_loss_D_fake_discrim = loss_D_fake_discrim.data[0]
                 last_loss_D_real_discrim = loss_D_real_discrim.data[0]
 
                 ######################################################################
                 # 2) UPDATE G NETWORK: maximize log(D(G(z))), i.e. want D(G(z)) to be 1's
                 ######################################################################
-                self.influencers_model.zero_grad()
+                self.influencers_model.zero_grad()  # TODO: should this be here? I'm not sure... we already
+                # zero it out above before calcuating batch_influencers_emb.
+                # On the other hand, this means it gets mixed with training D on fake images
                 self.artist_G.zero_grad()
+
                 discrim, aux = self.artist_D(fake_imgs)  # now that D's been updated
                 real_labels = Variable(torch.ones(batch_size, 1))  # fake labels are real for generator cost
                 if torch.cuda.is_available():

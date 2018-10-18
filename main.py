@@ -13,7 +13,8 @@ if __name__ == '__main__':
     parser.add_argument('--mode', dest='mode', default='train', help='train,generate')
     parser.add_argument('--influencers', dest='influencers', default=None,
                         help='Comma-separated list of artist-names. Used when generating')
-    # parser.add_argument('-lr', dest='lr', default=None)
+    parser.add_argument('--zero_infl_emb', action='store_true',
+                        help='Fill influencers embedding with zeros')
     parser.add_argument('--notes', dest='notes', default=None,
                         help='helpful to save some notes about this experiment (i.e. changes made)')
     cmdline = parser.parse_args()
@@ -21,6 +22,8 @@ if __name__ == '__main__':
     # Load default hyperparameters and update
     hparams = HParams()
     # hparams.lr = cmdline.lr if cmdline.lr is not None else hparams.lr
+    if cmdline.zero_infl_emb:
+        hparams.zero_infl_emb = True
     hparams.notes = cmdline.notes
 
     net = Network(hparams)
