@@ -313,6 +313,7 @@ class Network(object):
                 # TODO: should we have this
                 if (last_loss_D_fake_discrim > 0.3) and (last_loss_D_real_discrim > 0.3):
                     D_optimizer.step()
+                    infl_optimizer.step()
 
                 last_loss_D_fake_discrim = loss_D_fake_discrim.data[0]
                 last_loss_D_real_discrim = loss_D_real_discrim.data[0]
