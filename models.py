@@ -114,30 +114,14 @@ class Generator(nn.Module):
     def __init__(self, z_size, num_filters, influencers_emb_size):
         super(Generator, self).__init__()
 
-        # self.relu = nn.ReLU(True)
         self.tanh = nn.Tanh()
 
-        # First layers operating on z
-        self.lin1 = nn.Linear(z_size, num_filters[0])
-        self.conv2_z = nn.ConvTranspose2d(num_filters[0], num_filters[1], 5, 2)
-        self.bn2_z = nn.BatchNorm2d(num_filters[1])
-        self.conv3_z = nn.ConvTranspose2d(num_filters[1], num_filters[2] / 2, 5, 2)
-        self.bn3_z = nn.BatchNorm2d(num_filters[2] / 2)
+        self.lin1 = nn.Linear(z_size + influencers_emb_size, num_filters[0])
 
-        # Don't use influencers emb
-        # self.lin1 = nn.Linear(z_size, num_filters[0])
-        # self.conv2_z = nn.ConvTranspose2d(num_filters[0], num_filters[1], 5, 2)
-        # self.bn2_z = nn.BatchNorm2d(num_filters[1])
-        # self.conv3_z = nn.ConvTranspose2d(num_filters[1], num_filters[2], 5, 2)
-        # self.bn3_z = nn.BatchNorm2d(num_filters[2])
-
-        # First layers operating on influencers embedding (in parallel with above)
-        self.conv2_inf = nn.ConvTranspose2d(influencers_emb_size, num_filters[1], 5, 2)
-        self.bn2_inf = nn.BatchNorm2d(num_filters[1])
-        self.conv3_inf = nn.ConvTranspose2d(num_filters[1], num_filters[2] / 2, 5, 2)
-        self.bn3_inf = nn.BatchNorm2d(num_filters[2] / 2)
-
-        # After fusion of z and influencers
+        self.conv2 = nn.ConvTranspose2d(num_filters[0], num_filters[1], 5, 2)
+        self.bn2 = nn.BatchNorm2d(num_filters[1])
+        self.conv3 = nn.ConvTranspose2d(num_filters[1], num_filters[2], 5, 2)
+        self.bn3 = nn.BatchNorm2d(num_filters[2])
         self.conv4 = nn.ConvTranspose2d(num_filters[2], num_filters[3], 5, 2)
         self.bn4 = nn.BatchNorm2d(num_filters[3])
         self.conv5 = nn.ConvTranspose2d(num_filters[3], num_filters[4], 5, 2)
@@ -156,34 +140,22 @@ class Generator(nn.Module):
         """
         batch_size = z.size(0)
 
-        # Pass through linear layer, reshape
-        z = z.view(batch_size, -1)
-        z = self.lin1(z)                            # (batch, num_filters[0])
-        z = z.view(z.size(0), z.size(1), 1, 1)      # (batch, num_filters[0], 1, 1)
+        # Combine noise and influencers embedding, pass through linear layer, reshape
+        comb = torch.cat([z, influencers_emb], dim=1)
+        comb = comb.view(batch_size, -1)
+        comb = self.lin1(comb)                                  # (batch, num_filters[0])
+        comb = comb.view(comb.size(0), comb.size(1), 1, 1)      # (batch, num_filters[0], 1, 1)
 
-        # In parallel, pass z and influencers_emb through conv layers
-        z = F.leaky_relu(self.bn2_z(self.conv2_z(z)), 0.2)
-        z = F.leaky_relu(self.bn3_z(self.conv3_z(z)), 0.2)
-        # z = self.relu(self.bn2_z(self.conv2_z(z)))
-        # z = self.relu(self.bn3_z(self.conv3_z(z)))
+        # Pass through conv layers
+        comb = F.leaky_relu(self.bn2(self.conv2(comb)), 0.2)
+        comb = F.leaky_relu(self.bn3(self.conv3(comb)), 0.2)
+        comb = F.leaky_relu(self.bn4(self.conv4(comb)), 0.2)
+        comb = F.leaky_relu(self.bn5(self.conv5(comb)), 0.2)
+        comb = self.conv6(comb)
 
-        influencers_emb = F.leaky_relu(self.bn2_inf(self.conv2_inf(influencers_emb)), 0.2)
-        influencers_emb = F.leaky_relu(self.bn3_inf(self.conv3_inf(influencers_emb)), 0.2)
-        # influencers_emb = self.relu(self.bn2_inf(self.conv2_inf(influencers_emb)))
-        # influencers_emb = self.relu(self.bn3_inf(self.conv3_inf(influencers_emb)))
+        comb = self.tanh(comb)
 
-        # Fuse
-        x = torch.cat([z, influencers_emb], 1)      # (batch, filters, x, y)
-        # x = z  # if not using influencers emb
-
-        x = F.leaky_relu(self.bn4(self.conv4(x)), 0.2)
-        x = F.leaky_relu(self.bn5(self.conv5(x)), 0.2)
-        # x = self.relu(self.bn4(self.conv4(x)))
-        # x = self.relu(self.bn5(self.conv5(x)))
-        x = self.conv6(x)
-        x = self.tanh(x)
-
-        return x
+        return comb
 
 class Discriminator(nn.Module):
 
@@ -192,7 +164,6 @@ class Discriminator(nn.Module):
 
         self.num_filters = num_filters
         self.num_labels = num_labels
-
 
         self.conv1 = nn.Conv2d(3, num_filters[0], 3, 2)                    # 16 maps
         self.conv2 = nn.Conv2d(num_filters[0], num_filters[1], 3, 1)      # 32
@@ -228,8 +199,8 @@ class Discriminator(nn.Module):
         # self.bn6 = nn.BatchNorm2d(num_filters * 32)
 
         # self.linear = nn.Linear(num_filters * 32, num_labels + 1)   # plus 1 for discrim
-        # self.sigmoid = nn.Sigmoid()
-        # self.softmax = nn.Softmax()
+        self.sigmoid = nn.Sigmoid()
+        self.softmax = nn.Softmax()
 
     # weight_init
     def weight_init(self, mean, std):
@@ -250,9 +221,10 @@ class Discriminator(nn.Module):
         # print x.size()
         x = self.lin(x)  # (1, 203)
 
-        discrim = nn.Sigmoid()(x[:,0])          # (batch, )
+        # Use first element for discriminator, rest for auxiliary classifier
+        discrim = self.sigmoid(x[:,0])          # (batch, )
         discrim = torch.unsqueeze(discrim, 1)   # (batch, 1)
-        aux = nn.Softmax()(x[:,1:])             # (batch, num_labels)
+        aux = self.softmax(x[:,1:], dim=1)             # (batch, num_labels)
 
         return discrim, aux
 
