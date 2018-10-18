@@ -235,7 +235,7 @@ class Discriminator(nn.Module):
         discrim = self.discrim_lin(x)  # (batch, 1)
         discrim = self.sigmoid(discrim)
         aux = self.aux_lin(x)  # (batch, num_labels)
-        aux = self.softmax(aux)
+        # aux = self.softmax(aux)
 
         # # Use first element for discriminator, rest for auxiliary classifier
         # discrim = self.sigmoid(x[:,0])          # (batch, )
