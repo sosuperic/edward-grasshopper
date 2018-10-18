@@ -140,6 +140,12 @@ class Network(object):
         targets = Variable(torch.Tensor(targets))
         return targets
 
+    def compute_acc(self, preds, labels):
+        preds_ = preds.data.max(1)[1]
+        correct = preds_.eq(labels.data).cpu().sum()
+        acc = float(correct) / float(len(labels.data)) * 100.0
+        return acc
+
     def train(self):
         """Train on training data split"""
         for model in self.models:
@@ -261,6 +267,8 @@ class Network(object):
                 loss_D_real = loss_D_real_discrim + loss_D_real_aux
                 loss_D_real.backward()
 
+                D_aux_acc = self.compute_acc(aux, targets)
+
                 # # Train D to be a classifier (comment out above loss_D_real lines, skip rest of D and G)
                 # loss_D_real_aux.backward()
                 # D_optimizer.step()
@@ -334,6 +342,8 @@ class Network(object):
                 loss_G_discrim = D_discrim_criterion(discrim,
                                                      real_labels)  # To train G, want D to think images are real, so use torch.ones. Minimize cross entropy between discrim and ones.
                 loss_G_aux = D_aux_criterion(aux, targets)
+                G_aux_acc = self.compute_acc(aux, targets)
+
                 loss_G = loss_G_discrim + loss_G_aux
                 loss_G.backward()
                 infl_optimizer.step()
@@ -361,6 +371,9 @@ class Network(object):
                                       e * train_data_loader.__len__() + train_idx)
                     # writer.add_scalar('loss_G', loss_G.clone().cpu().data.numpy(),
                     #                   e * train_data_loader.__len__() + train_idx)
+
+                    writer.add_scalar('acc_D', D_aux_acc, e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('acc_G', G_aux_acc, e * train_data_loader.__len__() + train_idx)
 
 
                 # Save images, remembering to normalize back to [0,1]
