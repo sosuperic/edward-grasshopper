@@ -129,14 +129,12 @@ class Generator(nn.Module):
         self.conv6 = nn.ConvTranspose2d(num_filters[4], 3, 4, 2)
 
     def weight_init(self, mean, std):
-        for m in self._modules:
-            classname = m.__class__.__name__
-            if classname.find('Conv') != -1:
-                m.weight.data.normal_(0.0, 0.02)
-            elif classname.find('BatchNorm') != -1:
-                m.weight.data.normal_(1.0, 0.02)
-                m.bias.data.fill_(0)
-            # normal_init(self._modules[m], mean, std)
+        for name, mod in self.named_children():
+            if 'conv' in name:
+                mod.weight.data.normal_(mean, std)
+            elif 'bn' in name:
+                mod.weight.data.normal_(1.0, 0.02)
+                mod.bias.data.fill_(0)
 
     def forward(self, z, influencers_emb):
         """

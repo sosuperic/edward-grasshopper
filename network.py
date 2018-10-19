@@ -44,8 +44,8 @@ class Network(object):
             self.influencers_model = nn.Linear(ARTIST_EMB_DIM, hp.infl_hidden_size)  # averaging GMM modes
             final_influencers_emb_size = hp.infl_hidden_size
         elif self.hp.infl_type == 'lstm':
-            self.influencers_lstm = InfluencersLSTM(ARTIST_EMB_DIM, hp.lstm_emb_size, hp.infl_hidden_size)
-            final_influencers_emb_size = self.influencers_lstm.get_final_emb_size()
+            self.influencers_model = InfluencersLSTM(ARTIST_EMB_DIM, hp.lstm_emb_size, hp.infl_hidden_size)
+            final_influencers_emb_size = self.influencers_model.get_final_emb_size()
         self.artist_G = Generator(hp.z_size, hp.g_num_filters, final_influencers_emb_size)
         self.artist_D = Discriminator(hp.d_num_filters, WikiartDataset.get_num_valid_artists(TRAIN_ON_ALL))
         self.models = [self.influencers_model, self.artist_G, self.artist_D]
@@ -120,8 +120,8 @@ class Network(object):
 
         # Convert to Variable
         x = torch.Tensor(x)
-        if hasattr(self.hp, 'zero_infl_emb') and self.hp.zero_infl_emb:
-            x = torch.zeros_like(x)  # debugging whether or not we should even have influencers embeddings
+        if hasattr(self.hp, 'rand_infl_emb') and self.hp.rand_infl_emb:
+            x = x.normal_(0, 1)
         x = Variable(x)
         if torch.cuda.is_available():
             x = x.cuda()
@@ -267,7 +267,7 @@ class Network(object):
                 loss_D_real = loss_D_real_discrim + loss_D_real_aux
                 loss_D_real.backward()
 
-                D_aux_acc = self.compute_acc(aux, targets)
+                real_aux_acc = self.compute_acc(aux, targets)
 
                 # # Train D to be a classifier (comment out above loss_D_real lines, skip rest of D and G)
                 # loss_D_real_aux.backward()
@@ -307,25 +307,33 @@ class Network(object):
                 #     instance_noise = instance_noise.cuda()
                 # fake_imgs = fake_imgs + Variable(instance_noise)
                 fake_labels = Variable(torch.zeros(batch_size, 1))
+                fake_targets = np.random.randint(0, len(artist_batch), batch_size)
+                fake_targets = Variable(torch.LongTensor(fake_targets))
                 if torch.cuda.is_available():
                     fake_labels = fake_labels.cuda()
+                    fake_targets = fake_targets.cuda()
 
                 discrim, aux = self.artist_D(fake_imgs.detach())
                 loss_D_fake_discrim = D_discrim_criterion(discrim, fake_labels)
+                # loss_D_fake_aux = D_aux_criterion(aux, fake_targets)
                 loss_D_fake_aux = D_aux_criterion(aux, targets)
                 loss_D_fake = loss_D_fake_discrim + loss_D_fake_aux
                 loss_D_fake.backward()
+
+                # TODO: https://github.com/gitlimlab/ACGAN-PyTorch/blob/master/main.py
+                # seems to compute random targets?
+
                 # D_G_z1 = output.data.mean()
                 # loss_D = loss_D_real + loss_D_fake
 
                 # Don't perform gradient descent step if D is too well-trained
-                # # TODO: should we have this
-                # if (last_loss_D_fake_discrim > 0.3) and (last_loss_D_real_discrim > 0.3):
-                D_optimizer.step()
-                infl_optimizer.step()
+                # TODO: should we have this
+                if (last_loss_D_fake_discrim > 0.3) and (last_loss_D_real_discrim > 0.3):
+                    D_optimizer.step()
+                    infl_optimizer.step()
 
-                # last_loss_D_fake_discrim = loss_D_fake_discrim.data[0]
-                # last_loss_D_real_discrim = loss_D_real_discrim.data[0]
+                last_loss_D_fake_discrim = loss_D_fake_discrim.data[0]
+                last_loss_D_real_discrim = loss_D_real_discrim.data[0]
 
                 ######################################################################
                 # 2) UPDATE G NETWORK: maximize log(D(G(z))), i.e. want D(G(z)) to be 1's
@@ -342,7 +350,8 @@ class Network(object):
                 loss_G_discrim = D_discrim_criterion(discrim,
                                                      real_labels)  # To train G, want D to think images are real, so use torch.ones. Minimize cross entropy between discrim and ones.
                 loss_G_aux = D_aux_criterion(aux, targets)
-                G_aux_acc = self.compute_acc(aux, targets)
+                # TODO: wait i'm not sure that the reference repo uses the actual targets vs. the random ones
+                fake_aux_acc = self.compute_acc(aux, targets)
 
                 loss_G = loss_G_discrim + loss_G_aux
                 loss_G.backward()
@@ -372,8 +381,8 @@ class Network(object):
                     # writer.add_scalar('loss_G', loss_G.clone().cpu().data.numpy(),
                     #                   e * train_data_loader.__len__() + train_idx)
 
-                    writer.add_scalar('acc_D', D_aux_acc, e * train_data_loader.__len__() + train_idx)
-                    writer.add_scalar('acc_G', G_aux_acc, e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('acc_real', real_aux_acc, e * train_data_loader.__len__() + train_idx)
+                    writer.add_scalar('acc_fake', fake_aux_acc, e * train_data_loader.__len__() + train_idx)
 
 
                 # Save images, remembering to normalize back to [0,1]
