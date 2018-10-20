@@ -24,6 +24,27 @@ from config import SAVED_MODELS_PATH, ARTIST_EMB_DIM ,\
 from datasets import get_wikiart_data_loader, WikiartDataset
 from models import InfluencersLSTM, Generator, Discriminator
 
+
+class UnNormalize(object):
+    def __init__(self, mean, std):
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, tensor):
+        """
+        Args:
+            tensor (Tensor): Tensor image of size (C, H, W) to be normalized.
+        Returns:
+            Tensor: Normalized image.
+        """
+        for t, m, s in zip(tensor, self.mean, self.std):
+            t.mul_(s).add_(m)
+            # The normalize code -> t.sub_(m).div_(s)
+        return tensor
+IMG_MEAN_ALL = [0.518804936264, 0.455788331489, 0.388189828956]
+IMG_STD_ALL = [0.175493882268, 0.177110228715, 0.185269485347]
+unnorm = UnNormalize(mean=IMG_MEAN_ALL, std=IMG_STD_ALL)
+
 ###############################################################################
 # NETWORK
 ###############################################################################
@@ -232,6 +253,7 @@ class Network(object):
                 # Move inputs to cuda if possible
                 if torch.cuda.is_available():
                     img_batch = img_batch.cuda()
+                img_batch = Variable(img_batch)
 
                 # For each image, we have to get the artist and their influencer embeddings
                 batch_influencers_emb, lengths, sorted_artists = self.get_influencers_emb(artist_batch)
@@ -255,7 +277,7 @@ class Network(object):
                 # if torch.cuda.is_available():
                 #     instance_noise = instance_noise.cuda()
                 # discrim, aux = self.artist_D(Variable(img_batch + instance_noise))
-                discrim, aux = self.artist_D(Variable(img_batch))
+                discrim, aux = self.artist_D(img_batch)
 
                 real_labels = torch.ones(batch_size, 1)
                 if torch.cuda.is_available():
@@ -266,6 +288,7 @@ class Network(object):
                 loss_D_real_aux = D_aux_criterion(aux, targets)
                 loss_D_real = loss_D_real_discrim + loss_D_real_aux
                 loss_D_real.backward()
+                # loss_D_real_discrim.backward()
 
                 real_aux_acc = self.compute_acc(aux, targets)
 
@@ -319,6 +342,7 @@ class Network(object):
                 loss_D_fake_aux = D_aux_criterion(aux, targets)
                 loss_D_fake = loss_D_fake_discrim + loss_D_fake_aux
                 loss_D_fake.backward()
+                # loss_D_fake_discrim.backward()
 
                 # TODO: https://github.com/gitlimlab/ACGAN-PyTorch/blob/master/main.py
                 # seems to compute random targets?
@@ -328,9 +352,9 @@ class Network(object):
 
                 # Don't perform gradient descent step if D is too well-trained
                 # TODO: should we have this
-                if (last_loss_D_fake_discrim > 0.3) and (last_loss_D_real_discrim > 0.3):
-                    D_optimizer.step()
-                    infl_optimizer.step()
+                # if (last_loss_D_fake_discrim > 0.3) and (last_loss_D_real_discrim > 0.3):
+                D_optimizer.step()
+                infl_optimizer.step()
 
                 last_loss_D_fake_discrim = loss_D_fake_discrim.data[0]
                 last_loss_D_real_discrim = loss_D_real_discrim.data[0]
@@ -352,9 +376,11 @@ class Network(object):
                 loss_G_aux = D_aux_criterion(aux, targets)
                 # TODO: wait i'm not sure that the reference repo uses the actual targets vs. the random ones
                 fake_aux_acc = self.compute_acc(aux, targets)
+                # pdb.set_trace()
 
                 loss_G = loss_G_discrim + loss_G_aux
                 loss_G.backward()
+                # loss_G_discrim.backward()
                 infl_optimizer.step()
                 G_optimizer.step()
 
@@ -392,7 +418,8 @@ class Network(object):
                     print 'Epoch {} - {}'.format(e, train_idx)
 
                     # Save some real images (sanity check)
-                    vutils.save_image(img_batch[0:4], os.path.join(out_dir_imgs, 'real_e{}_{}.png'.format(e, train_idx)), normalize=True)
+                    vutils.save_image(unnorm(img_batch.data[0:4]), os.path.join(out_dir_imgs, 'real_e{}_{}.png'.format(e, train_idx)),
+                                      normalize=True, scale_each=True)
 
                     # Generate fake
                     test_batch_influencers_emb, test_lengths, test_sorted_artists = \
@@ -418,15 +445,26 @@ class Network(object):
                         test_noise = test_noise.cuda()
                     fake_imgs_fixed = self.artist_G(fixed_noise, test_batch_influencers_emb)
                     fake_imgs_random = self.artist_G(test_noise, test_batch_influencers_emb)
-                    vutils.save_image(fake_imgs_fixed.data, os.path.join(out_dir_imgs, 'fake_fixed_e{}_{}.png'.format(e, train_idx)), normalize=True)
-                    vutils.save_image(fake_imgs_random.data, os.path.join(out_dir_imgs, 'fake_random_e{}_{}.png'.format(e, train_idx)), normalize=True)
+                    # TODO: do I have to unnorm these fake_imgs? Shoudln't I have to unnorm the real images being
+                    # saved up to as well? Why the discrepancy?
+
+
+                    vutils.save_image(unnorm(fake_imgs_fixed.data), os.path.join(out_dir_imgs, 'fake_fixed_e{}_{}.png'.format(e, train_idx)),
+                                      normalize=True, scale_each=True)
+                    vutils.save_image(unnorm(fake_imgs_random.data), os.path.join(out_dir_imgs, 'fake_random_e{}_{}.png'.format(e, train_idx)),
+                                      normalize=True, scale_each=True)
 
                     # Write image to tensorboard
                     tboard_name = '_'.join(test_artist_batch)
-                    tboard_image = vutils.make_grid(fake_imgs_fixed.data, normalize=True, scale_each=True)
+                    tboard_image = vutils.make_grid(unnorm(fake_imgs_fixed.data), normalize=True, scale_each=True)
                     writer.add_image(tboard_name  + '__fixed', tboard_image, train_idx)  # TODO: should this be e * n + train_idx?
-                    tboard_image = vutils.make_grid(fake_imgs_random.data, normalize=True, scale_each=True)
+                    tboard_image = vutils.make_grid(unnorm(fake_imgs_random.data), normalize=True, scale_each=True)
                     writer.add_image(tboard_name + '__random', tboard_image, train_idx)  # TODO: should this be e * n + train_idx?
+
+                    # Write real images to tensorboard
+                    tboard_name = 'real-images'
+                    tboard_image = vutils.make_grid(unnorm(img_batch.data[0:4]), normalize=True, scale_each=True)
+                    writer.add_image(tboard_name + '_' + artist_batch[0], tboard_image, train_idx)
 
                     # Save
                     if e % self.hp.save_every_nepochs == 0:
