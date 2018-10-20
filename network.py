@@ -464,7 +464,7 @@ class Network(object):
                     # Write real images to tensorboard
                     tboard_name = 'real-images'
                     tboard_image = vutils.make_grid(unnorm(img_batch.data[0:4]), normalize=True, scale_each=True)
-                    writer.add_image(tboard_name + '_' + artist_batch[0], tboard_image, train_idx)
+                    writer.add_image(tboard_name, tboard_image, train_idx)
 
                     # Save
                     if e % self.hp.save_every_nepochs == 0:
