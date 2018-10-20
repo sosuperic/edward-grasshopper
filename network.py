@@ -307,13 +307,12 @@ class Network(object):
                     self.influencers_model.zero_grad()
                     batch_influencers_emb = self.influencers_model(batch_influencers_emb)  # no lstm case, don't need lengths
                 elif self.hp.infl_type == 'lstm':
-                    self.influencers_lstm.lstm.zero_grad()
-                    self.influencers_lstm.lin_layer.zero_grad()
-                    lstm_init_h, lstm_init_c = self.influencers_lstm.init_hidden(batch_size)  # clear out hidden states
+                    self.influencers_model.zero_grad()
+                    lstm_init_h, lstm_init_c = self.influencers_model.init_hidden(batch_size)  # clear out hidden states
                     if torch.cuda.is_available():
                         lstm_init_h = lstm_init_h.cuda()
                         lstm_init_c = lstm_init_c.cuda()
-                    batch_influencers_emb = self.influencers_lstm(batch_influencers_emb, lengths,
+                    batch_influencers_emb = self.influencers_model(batch_influencers_emb, lengths,
                                                                   lstm_init_h, lstm_init_c)
                     # (num_layers * num_directions, batch, 2 * hidden_size)
                 batch_influencers_emb = batch_influencers_emb.view(batch_size, -1, 1, 1)  # (batch, ..., 1, 1)
@@ -428,13 +427,13 @@ class Network(object):
                         test_batch_influencers_emb = self.influencers_model(
                             test_batch_influencers_emb)  # no lstm case, don't need lengths
                     elif self.hp.infl_type == 'lstm':
-                        lstm_init_h, lstm_init_c = self.influencers_lstm.init_hidden(len(test_artist_batch))  # clear out hidden states
+                        lstm_init_h, lstm_init_c = self.influencers_model.init_hidden(len(test_artist_batch))  # clear out hidden states
                         test_batch_influencers_emb, test_lengths, test_sorted_artists = self.get_influencers_emb(test_artist_batch)
                         if torch.cuda.is_available():
                             test_batch_influencers_emb = test_batch_influencers_emb.cuda()
                             lstm_init_h = lstm_init_h.cuda()
                             lstm_init_c = lstm_init_c.cuda()
-                        test_batch_influencers_emb = self.influencers_lstm(test_batch_influencers_emb,test_lengths,
+                        test_batch_influencers_emb = self.influencers_model(test_batch_influencers_emb,test_lengths,
                                                                            lstm_init_h, lstm_init_c)
                         # (num_layers * num_directions, batch, 2 * hidden_size)
 
@@ -498,15 +497,14 @@ class Network(object):
         for model in self.models:
             model.eval()
 
-        # batch_size = 1
-
         # Get influencers_emb
         influencers = influencers.split(',')
-        # TODO: get_influcners_emb takes a batch of artists. Whereas influencers here is the influencers themselves
-        # Different. Want to just get it and then repeat it n times
         batch_influencers_emb, lengths, sorted_artists = self.get_influencers_emb(influencers)
+        # TODO: repeat batch_influencers_emb
+        batch_influencers_emb = self.influencers_model(batch_influencers_emb)  # no lstm case, don't need lengths
+
         lstm_init_h, lstm_init_c = self.influencers_model.init_hidden(len(influencers))  # clear out hidden states
-        batch_influencers_emb = self.influencers_lstm(batch_influencers_emb,
+        batch_influencers_emb = self.influencers_model(batch_influencers_emb,
                                                       lengths,
                                                       lstm_init_h,
                                                       lstm_init_c)  # (num_layers * num_directions, batch, 2 * hidden_size)
