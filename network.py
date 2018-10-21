@@ -173,26 +173,28 @@ class Network(object):
             model.train()
 
         # Load models
-        if self.hp.load_infl_fp is not None:
-            print 'Loading LSTM'
-            self.influencers_model.load_state_dict(torch.load(self.hp.load_infl_fp))
-        if self.hp.load_G_fp is not None:
-            print 'Loading G'
-            self.artist_G.load_state_dict(torch.load(self.hp.load_G_fp))
-        if self.hp.load_D_fp is not None:
-            print 'Loading D'
-            self.artist_D.load_state_dict(torch.load(self.hp.load_D_fp))
+        if False:
+            pass
+        # if self.hp.load_infl_fp is not None:
+        #     print 'Loading LSTM'
+        #     self.influencers_model.load_state_dict(torch.load(self.hp.load_infl_fp))
+        # if self.hp.load_G_fp is not None:
+        #     print 'Loading G'
+        #     self.artist_G.load_state_dict(torch.load(self.hp.load_G_fp))
+        # if self.hp.load_D_fp is not None:
+        #     print 'Loading D'
+        #     self.artist_D.load_state_dict(torch.load(self.hp.load_D_fp))
 
         # If all paths are given, then keep on saving things to that directory
         # (Assumes all paths are from same directory)
         # Else make a new directory
-        if (self.hp.load_infl_fp is not None) and \
-                (self.hp.load_G_fp is not None) and \
-                (self.hp.load_D_fp is not None):
-            out_dir = os.path.dirname(self.hp.load_infl_fp)
-            out_dir_imgs = os.path.join(out_dir, 'imgs')
-            print 'Checkpoints will continue to be saved to: {}'.format(out_dir)
-            cur_epoch = self.hp.cur_epoch
+        # if (self.hp.load_infl_fp is not None) and \
+        #         (self.hp.load_G_fp is not None) and \
+        #         (self.hp.load_D_fp is not None):
+        #     out_dir = os.path.dirname(self.hp.load_infl_fp)
+        #     out_dir_imgs = os.path.join(out_dir, 'imgs')
+        #     print 'Checkpoints will continue to be saved to: {}'.format(out_dir)
+        #     cur_epoch = self.hp.cur_epoch
         else:
             # Make directory to store outputs
             out_dir_name = datetime.now().strftime('%B%d_%H-%M-%S')
@@ -513,19 +515,21 @@ class Network(object):
         if self.hp.infl_type == 'ff':
             influencers_emb = torch.mean(influencers_emb, dim=0)  # [2048]
             influencers_emb = influencers_emb.repeat(n, 1)  # [n, 2048]
-            batch_influencers_emb = self.influencers_model(influencers_emb)  # no lstm case, don't need lengths
+            influencers_emb = self.influencers_model(influencers_emb)  # no lstm case, don't need lengths
 
         elif self.hp.infl_type == 'lstm':
-            lstm_init_h, lstm_init_c = self.influencers_model.init_hidden(self.hp.batch_size)  # clear out hidden states
-            # TODO: step 2 (combine the embeddings)
+            influencers_emb = influencers_emb.repeat(1, n, 1)  # [n_modes, 1, 2048] -> [n_modes, n, 2048]
+            assert len(lengths) == 1   # (batch size is jsut one)
+            lengths = [lengths[0] for _ in range(n)]
+            lstm_init_h, lstm_init_c = self.influencers_model.init_hidden(n)  # clear out hidden states
             if torch.cuda.is_available():
                 lstm_init_h = lstm_init_h.cuda()
                 lstm_init_c = lstm_init_c.cuda()
-            batch_influencers_emb = self.influencers_model(batch_influencers_emb, lengths,
-                                                           lstm_init_h, lstm_init_c)
 
-        batch_influencers_emb = batch_influencers_emb.view(n, -1, 1, 1)  # (batch, ..., 1, 1)
-        generated = self.artist_G(noise, batch_influencers_emb)
+            influencers_emb = self.influencers_model(influencers_emb, lengths, lstm_init_h, lstm_init_c)
+
+        influencers_emb = influencers_emb.view(n, -1, 1, 1)  # (batch, ..., 1, 1)
+        generated = self.artist_G(noise, influencers_emb)
 
         # Write image to tensorboard and save image
         out_dir = os.path.dirname(self.hp.load_infl_fp)

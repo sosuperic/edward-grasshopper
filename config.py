@@ -15,7 +15,7 @@ class HParams():
 
         # Model
         self.img_size = 128
-        self.infl_type = 'ff'  # ff or lstm
+        self.infl_type = 'lstm'  # ff or lstm
         self.lstm_emb_size = 512                # size of linear layer before LSTM
         self.infl_hidden_size = 128
         self.d_num_filters = [32, 64, 128, 256, 512]
@@ -27,9 +27,12 @@ class HParams():
         self.load_G_fp = None
         self.load_D_fp = None
         self.cur_epoch = None
-        self.load_infl_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/infl_e9.pt'               # Pretrained / partially-trained LSTM
-        self.load_G_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/G_e9.pt'
-        self.load_D_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/D_e9.pt'
+        # self.load_infl_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/infl_e9.pt'               # Pretrained / partially-trained LSTM
+        # self.load_G_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/G_e9.pt'
+        # self.load_D_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/D_e9.pt'
+        self.load_infl_fp = 'checkpoints/October21_02-14-57_always-update_new-G_new-D_lstm-lrelu-linear/infl_e5.pt'               # Pretrained / partially-trained LSTM
+        self.load_G_fp = 'checkpoints/October21_02-14-57_always-update_new-G_new-D_lstm-lrelu-linear/G_e5.pt'
+        self.load_D_fp = 'checkpoints/October21_02-14-57_always-update_new-G_new-D_lstm-lrelu-linear/D_e5.pt'
         # self.cur_epoch = 13
 
 # Manually selected list of artists to train on (number of images is also given)

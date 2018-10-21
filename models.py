@@ -69,6 +69,7 @@ class InfluencersLSTM(nn.Module):
         #     self.lstm.cuda()
 
         x = self.lin_layer(x)
+        x = F.leaky_relu(x, 0.2)
         packed = nn.utils.rnn.pack_padded_sequence(x, lengths, batch_first=False)
 
         # Pass into LSTM
