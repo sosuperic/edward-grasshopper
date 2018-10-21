@@ -27,9 +27,9 @@ class HParams():
         self.load_G_fp = None
         self.load_D_fp = None
         self.cur_epoch = None
-        # self.load_lstm_fp = 'checkpoints/December07_02-47-02/lstm_e12.pt'               # Pretrained / partially-trained LSTM
-        # self.load_G_fp = 'checkpoints/December07_02-47-02/G_e12.pt'
-        # self.load_D_fp = 'checkpoints/December07_02-47-02/D_e12.pt'
+        self.load_infl_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/infl_e9.pt'               # Pretrained / partially-trained LSTM
+        self.load_G_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/G_e9.pt'
+        self.load_D_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/D_e9.pt'
         # self.cur_epoch = 13
 
 # Manually selected list of artists to train on (number of images is also given)

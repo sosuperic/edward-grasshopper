@@ -497,21 +497,50 @@ class Network(object):
         for model in self.models:
             model.eval()
 
-        # Get influencers_emb
-        influencers = influencers.split(',')
-        batch_influencers_emb, lengths, sorted_artists = self.get_influencers_emb(influencers)
-        # TODO: repeat batch_influencers_emb
-        batch_influencers_emb = self.influencers_model(batch_influencers_emb)  # no lstm case, don't need lengths
-
-        lstm_init_h, lstm_init_c = self.influencers_model.init_hidden(len(influencers))  # clear out hidden states
-        batch_influencers_emb = self.influencers_model(batch_influencers_emb,
-                                                      lengths,
-                                                      lstm_init_h,
-                                                      lstm_init_c)  # (num_layers * num_directions, batch, 2 * hidden_size)
-        batch_influencers_emb = batch_influencers_emb.view(1, -1, 1, 1)  # (batch, ..., 1, 1)
-
         # Get noise
         noise = torch.FloatTensor(n, self.hp.z_size, 1, 1).normal_(0, 1)
         noise = Variable(noise)
+        if torch.cuda.is_available():
+            noise = noise.cuda()
 
-        fake_imgs = self.artist_G(noise, batch_influencers_emb)
+        # 1) Get embedding for each influencer
+        # 2) Combine the embeddings (either with a mean for the ff model, or concatenating for the lstm model)
+        # 3) Then repeat it n times so that we can generate n different images
+        influencers_emb, lengths, sorted_artists = self.get_influencers_emb(influencers.split(','))
+        # influencers_emb: [n_influencers, 2048]
+        # TODO: repeat batch_influencers_emb
+
+        if self.hp.infl_type == 'ff':
+            influencers_emb = torch.mean(influencers_emb, dim=0)  # [2048]
+            influencers_emb = influencers_emb.repeat(n, 1)  # [n, 2048]
+            batch_influencers_emb = self.influencers_model(influencers_emb)  # no lstm case, don't need lengths
+
+        elif self.hp.infl_type == 'lstm':
+            lstm_init_h, lstm_init_c = self.influencers_model.init_hidden(self.hp.batch_size)  # clear out hidden states
+            # TODO: step 2 (combine the embeddings)
+            if torch.cuda.is_available():
+                lstm_init_h = lstm_init_h.cuda()
+                lstm_init_c = lstm_init_c.cuda()
+            batch_influencers_emb = self.influencers_model(batch_influencers_emb, lengths,
+                                                           lstm_init_h, lstm_init_c)
+
+        batch_influencers_emb = batch_influencers_emb.view(n, -1, 1, 1)  # (batch, ..., 1, 1)
+        generated = self.artist_G(noise, batch_influencers_emb)
+
+        # Write image to tensorboard and save image
+        out_dir = os.path.dirname(self.hp.load_infl_fp)
+        out_dir = os.path.join(out_dir, 'generated', influencers.replace(',', '_'))
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+        writer = SummaryWriter(out_dir)
+
+        tboard_name = 'generated_' + influencers
+        tboard_image = vutils.make_grid(unnorm(generated.data), normalize=True, scale_each=True)
+        writer.add_image(tboard_name, tboard_image, 0)
+
+        for i in range(n):
+            vutils.save_image(unnorm(generated.data[i]),
+                              os.path.join(out_dir, 'generated_{}.png'.format(i)),
+                              normalize=True, scale_each=True)
+
+        # pdb.set_trace()
