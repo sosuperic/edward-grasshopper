@@ -27,12 +27,12 @@ class HParams():
         self.load_G_fp = None
         self.load_D_fp = None
         self.cur_epoch = None
-        self.load_infl_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/infl_e8.pt'               # Pretrained / partially-trained LSTM
-        self.load_G_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/G_e8.pt'
-        self.load_D_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/D_e8.pt'
-        # self.load_infl_fp = 'checkpoints/October21_02-14-57_always-update_new-G_new-D_lstm-lrelu-linear/infl_e5.pt'               # Pretrained / partially-trained LSTM
-        # self.load_G_fp = 'checkpoints/October21_02-14-57_always-update_new-G_new-D_lstm-lrelu-linear/G_e5.pt'
-        # self.load_D_fp = 'checkpoints/October21_02-14-57_always-update_new-G_new-D_lstm-lrelu-linear/D_e5.pt'
+        # self.load_infl_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/infl_e8.pt'
+        # self.load_G_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/G_e8.pt'
+        # self.load_D_fp = 'checkpoints/October20_21-05-20_always-update_new-G_new-D/D_e8.pt'
+        self.load_infl_fp = 'checkpoints/October21_03-33-01_always-update_new-G_new-D_fuse-layer-3-G_rand-infl-emb/infl_e7.pt'
+        self.load_G_fp = 'checkpoints/October21_03-33-01_always-update_new-G_new-D_fuse-layer-3-G_rand-infl-emb/G_e7.pt'
+        self.load_D_fp = 'checkpoints/October21_03-33-01_always-update_new-G_new-D_fuse-layer-3-G_rand-infl-emb/D_e7.pt'
         # self.cur_epoch = 13
 
 # Manually selected list of artists to train on (number of images is also given)

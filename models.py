@@ -121,12 +121,27 @@ class Generator(nn.Module):
 
         # self.lin1 = nn.Linear(z_size + influencers_emb_size, num_filters[0])
 
-        self.conv1 = nn.ConvTranspose2d(z_size + influencers_emb_size, num_filters[0], 4, stride=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(num_filters[0])
-        self.conv2 = nn.ConvTranspose2d(num_filters[0], num_filters[1], 4, stride=2, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(num_filters[1])
-        self.conv3 = nn.ConvTranspose2d(num_filters[1], num_filters[2], 4, stride=2, padding=1, bias=False)
-        self.bn3 = nn.BatchNorm2d(num_filters[2])
+        # self.conv1 = nn.ConvTranspose2d(z_size + influencers_emb_size, num_filters[0], 4, stride=1, bias=False)
+        # self.bn1 = nn.BatchNorm2d(num_filters[0])
+        # self.conv2 = nn.ConvTranspose2d(num_filters[0], num_filters[1], 4, stride=2, padding=1, bias=False)
+        # self.bn2 = nn.BatchNorm2d(num_filters[1])
+        # self.conv3 = nn.ConvTranspose2d(num_filters[1], num_filters[2], 4, stride=2, padding=1, bias=False)
+        # self.bn3 = nn.BatchNorm2d(num_filters[2])
+
+        self.conv1_z = nn.ConvTranspose2d(z_size, num_filters[0], 4, stride=1, bias=False)
+        self.bn1_z = nn.BatchNorm2d(num_filters[0])
+        self.conv2_z = nn.ConvTranspose2d(num_filters[0], num_filters[1], 4, stride=2, padding=1, bias=False)
+        self.bn2_z = nn.BatchNorm2d(num_filters[1])
+        self.conv3_z = nn.ConvTranspose2d(num_filters[1], num_filters[2] / 2, 4, stride=2, padding=1, bias=False)
+        self.bn3_z = nn.BatchNorm2d(num_filters[2] / 2)
+
+        self.conv1_i = nn.ConvTranspose2d(influencers_emb_size, num_filters[0], 4, stride=1, bias=False)
+        self.bn1_i = nn.BatchNorm2d(num_filters[0])
+        self.conv2_i = nn.ConvTranspose2d(num_filters[0], num_filters[1], 4, stride=2, padding=1, bias=False)
+        self.bn2_i = nn.BatchNorm2d(num_filters[1])
+        self.conv3_i = nn.ConvTranspose2d(num_filters[1], num_filters[2] / 2, 4, stride=2, padding=1, bias=False)
+        self.bn3_i = nn.BatchNorm2d(num_filters[2] / 2)
+
         self.conv4 = nn.ConvTranspose2d(num_filters[2], num_filters[3], 4, stride=2, padding=1, bias=False)
         self.bn4 = nn.BatchNorm2d(num_filters[3])
         self.conv5 = nn.ConvTranspose2d(num_filters[3], num_filters[4], 4, stride=2, padding=1, bias=False)
@@ -146,14 +161,29 @@ class Generator(nn.Module):
         Inputs:
         - z: (batch, z_size, 1, 1)
         - influencers_emb (batch, embedding size, 1, 1)
-        """
-        # Combine noise and influencers embedding
-        comb = torch.cat([z, influencers_emb], dim=1)
+        # """
+        # # Combine noise and influencers embedding
+        # comb = torch.cat([z, influencers_emb], dim=1)
+        #
+        # # Pass through conv layers
+        # comb = F.leaky_relu(self.bn1(self.conv1(comb)), 0.2)
+        # comb = F.leaky_relu(self.bn2(self.conv2(comb)), 0.2)
+        # comb = F.leaky_relu(self.bn3(self.conv3(comb)), 0.2)
+        # comb = F.leaky_relu(self.bn4(self.conv4(comb)), 0.2)
+        # comb = F.leaky_relu(self.bn5(self.conv5(comb)), 0.2)
+        # comb = self.tanh(self.conv6(comb))
 
         # Pass through conv layers
-        comb = F.leaky_relu(self.bn1(self.conv1(comb)), 0.2)
-        comb = F.leaky_relu(self.bn2(self.conv2(comb)), 0.2)
-        comb = F.leaky_relu(self.bn3(self.conv3(comb)), 0.2)
+        z = F.leaky_relu(self.bn1_z(self.conv1_z(z)), 0.2)
+        z = F.leaky_relu(self.bn2_z(self.conv2_z(z)), 0.2)
+        z = F.leaky_relu(self.bn3_z(self.conv3_z(z)), 0.2)
+
+        influencers_emb = F.leaky_relu(self.bn1_i(self.conv1_i(influencers_emb)), 0.2)
+        influencers_emb = F.leaky_relu(self.bn2_i(self.conv2_i(influencers_emb)), 0.2)
+        influencers_emb = F.leaky_relu(self.bn3_i(self.conv3_i(influencers_emb)), 0.2)
+
+        comb = torch.cat([z, influencers_emb], dim=1)
+
         comb = F.leaky_relu(self.bn4(self.conv4(comb)), 0.2)
         comb = F.leaky_relu(self.bn5(self.conv5(comb)), 0.2)
         comb = self.tanh(self.conv6(comb))
